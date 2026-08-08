@@ -1,0 +1,41 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# generated — regenerate with `pnpm codegen`
+/src/gql/
+/schema.graphql
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# claude
+.claude/settings.local.json
+.claude/worktrees/
+
+# conductor
+.conductor/

@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator pothos {
+  provider          = "prisma-pothos-types"
+  generateDatamodel = "true"
+}
+
+// No `url` here — Prisma 7 moved it to prisma.config.ts (which reads DIRECT_URL
+// for the CLI). The runtime connection comes from @prisma/adapter-neon in
+// src/lib/prisma.ts, which reads DATABASE_URL.
+datasource db {
+  provider = "postgresql"
+}
+
+/// The unit of ownership for the entire app. Every domain model added later
+/// scopes through `householdId`, never through a flat `userId` — see the
+/// ownership convention in CLAUDE.md.
+///
+/// Capped at 2 members for v1. Created either solo (on a first sign-in with no
+/// invite) or joined via a HouseholdInvite.
+model Household {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  members User[]
+  invites HouseholdInvite[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  /// Palette slug from src/lib/members.ts — the basis for every "whose is
+  /// whose" badge in the app. Assigned at household creation (first member) or
+  /// at join (second member takes the free slot); stable thereafter.
+  color     String
+  createdAt DateTime @default(now())
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  createdInvites  HouseholdInvite[] @relation("CreatedBy")
+  acceptedInvites HouseholdInvite[] @relation("AcceptedBy")
+
+  @@index([householdId])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+}
+
+/// Single-use, never expires. Consumed by flipping status PENDING -> ACCEPTED
+/// with a conditional update, which is what makes "single use" race-safe.
+model HouseholdInvite {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  createdByUserId String
+  createdBy       User   @relation("CreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  status           InviteStatus @default(PENDING)
+  acceptedByUserId String?
+  acceptedBy       User?        @relation("AcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime  @default(now())
+  acceptedAt DateTime?
+
+  @@index([householdId])
+  @@index([createdByUserId])
+}
