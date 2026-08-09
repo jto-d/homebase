@@ -3,9 +3,9 @@
 import { createTheme } from '@mui/material/styles'
 
 /**
- * Deliberately minimal — just enough for the auth and pairing screens to look
- * intentional. The full design system (brand scales, typography variants, the
- * `components/ui` primitives) lands with the first feature brief.
+ * Deliberately minimal — enough for the auth and pairing screens. The full design
+ * system (brand scales, typography variants, `components/ui`) lands with the first
+ * feature brief.
  */
 export const theme = createTheme({
   palette: {

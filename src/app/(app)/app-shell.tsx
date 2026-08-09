@@ -11,9 +11,8 @@ import { HouseholdProvider } from './household-context'
 import { HouseholdDocument } from './household.queries'
 
 /**
- * Persistent app chrome. Mounts once and stays mounted across route changes,
- * so the single household query runs once and is shared with every page via
- * context.
+ * Persistent app chrome. Stays mounted across route changes, so the household
+ * query runs once and is shared with every page via context.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [{ data, fetching, error }, reexecuteQuery] = useQuery({ query: HouseholdDocument })

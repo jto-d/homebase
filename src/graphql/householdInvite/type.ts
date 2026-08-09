@@ -1,9 +1,8 @@
 import { builder } from '../builder'
 import { prisma } from '@/lib/prisma'
 
-// HouseholdInvite itself is deliberately not exposed. Nothing on the client
-// needs to browse invites, and `status` is the only bit of an invite that ever
-// mattered — so createdAt/acceptedAt stay out of the schema entirely.
+// HouseholdInvite itself is not exposed: nothing on the client browses invites,
+// and `status` is the only bit that matters, so timestamps stay out of the schema.
 
 export const InvitePreview = builder.simpleObject('InvitePreview', {
   fields: (t) => ({
@@ -19,8 +18,8 @@ export const HouseholdInvitePayload = builder.simpleObject('HouseholdInvitePaylo
   }),
 })
 
-// Not a simpleObject: the household field needs a real resolver so the Prisma
-// plugin can build the nested selection for `members`.
+// Not a simpleObject: `household` needs a real resolver so the Prisma plugin can
+// build the nested selection for `members`.
 export const AcceptInvitePayload = builder.objectRef<{ householdId: string }>('AcceptInvitePayload')
 
 builder.objectType(AcceptInvitePayload, {

@@ -4,13 +4,12 @@ import { cookies } from 'next/headers'
 import { INVITE_COOKIE } from '@/auth'
 
 /**
- * Park the invite code in a cookie just before handing off to Google, so the
- * `jwt` callback can create a brand-new partner directly into the inviter's
- * household instead of giving them a solo household to merge away.
+ * Park the invite code in a cookie before handing off to Google, so the `jwt`
+ * callback creates the partner directly into the inviter's household.
  *
- * `sameSite: 'lax'` is what makes this work: the cookie has to survive a
- * top-level navigation back from accounts.google.com, which 'strict' would
- * drop. It is short-lived because it only needs to outlive one OAuth round trip.
+ * `sameSite: 'lax'` is what makes it work — the cookie must survive the top-level
+ * navigation back from accounts.google.com, which 'strict' would drop. Short-lived
+ * because it only needs to outlive one OAuth round trip.
  */
 export async function stashInviteCode(code: string): Promise<void> {
   const store = await cookies()

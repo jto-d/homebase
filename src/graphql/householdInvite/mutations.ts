@@ -3,7 +3,7 @@ import { requireAuth } from '../context'
 import { AcceptInvitePayload, HouseholdInvitePayload } from './type'
 import { acceptInvite, createInvite } from '@/lib/household'
 
-/** Base for shareable invite links; falls back to local dev. */
+/** Base for shareable invite links. Falls back to local dev. */
 function appUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 }

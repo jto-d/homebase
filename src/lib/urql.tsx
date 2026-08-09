@@ -18,8 +18,8 @@ export function Providers({ children }: { children: ReactNode }) {
           ? `http://localhost:${process.env.PORT ?? 3000}/api/graphql`
           : '/api/graphql',
       exchanges: [cacheExchange, ssr, fetchExchange],
-      // With suspense on, useQuery tries to fetch during SSR and Node's native
-      // fetch rejects the relative URL with "Failed to parse URL".
+      // On, useQuery fetches during SSR and Node's fetch rejects the relative URL
+      // with "Failed to parse URL".
       suspense: false,
     })
     return [client, ssr]

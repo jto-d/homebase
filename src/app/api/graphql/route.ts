@@ -11,11 +11,9 @@ const yoga = createYoga<Record<string, never>, Context>({
   graphqlEndpoint: '/api/graphql',
   fetchAPI: { Response },
   maskedErrors: {
-    // Yoga's default is to replace every resolver error with "Unexpected
-    // error." — right for anything unplanned, but it would also hide the
-    // messages the pairing flow needs to show ("This invite has already been
-    // used", "Your household is already full"). Let those through by class,
-    // and keep masking everything else so Prisma internals never reach a client.
+    // Yoga replaces every resolver error with "Unexpected error." — right for
+    // anything unplanned, but it would hide the pairing flow's messages. Let those
+    // through by class; keep masking the rest so Prisma internals never reach a client.
     maskError(error, message) {
       const original = error instanceof GraphQLError ? error.originalError : error
       if (original instanceof UserFacingError) return error as GraphQLError
@@ -23,19 +21,18 @@ const yoga = createYoga<Record<string, never>, Context>({
       return createGraphQLError(message)
     },
   },
-  // Read the JWT straight off the incoming request. auth() relies on Next's
-  // headers() async-context, which Yoga's request handling doesn't reliably
-  // preserve — getToken({ req }) reads the session cookie directly instead.
+  // Read the JWT off the request: auth() relies on Next's headers() async-context,
+  // which Yoga's request handling doesn't reliably preserve.
   context: async ({ request }): Promise<Context> => {
-    // Yoga's request URL is the internal http:// container address; force secureCookie so getToken finds the __Secure-prefixed cookie Auth.js sets in production.
+    // Yoga's request URL is the internal http:// container address, so force
+    // secureCookie to find the __Secure- cookie Auth.js sets in production.
     const secureCookie = process.env.NODE_ENV === 'production'
     const token = await getToken({ req: request, secret: process.env.AUTH_SECRET, secureCookie })
     if (!token?.userId) return { userId: null, householdId: null }
 
-    // householdId is read fresh rather than taken off the token: accepting an
-    // invite moves a user to a different household and deletes the old one, so
-    // a token minted at sign-in would scope every query to a household that no
-    // longer exists until the user happened to sign in again.
+    // householdId is read fresh, not from the token: accepting an invite moves the
+    // user and deletes the old household, so a sign-in-minted token would scope
+    // every query to a household that no longer exists.
     const user = await prisma.user.findUnique({
       where: { id: token.userId },
       select: { householdId: true },

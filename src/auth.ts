@@ -4,12 +4,7 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { upsertUserForSignIn } from '@/lib/household'
 
-/**
- * Carries an invite code across the Google OAuth round trip. Set on the
- * /join/[code] landing page just before sign-in; read here on the way back so
- * a brand-new partner is created straight into the inviter's household instead
- * of getting a solo one that immediately has to be merged away.
- */
+/** Carries an invite code across the Google OAuth round trip, so a new partner is created straight into the inviter's household. Set on /join/[code], read here. */
 export const INVITE_COOKIE = 'homebase.invite'
 
 declare module 'next-auth' {
@@ -33,16 +28,13 @@ async function takeInviteCookie(): Promise<string | null> {
     if (code) store.delete(INVITE_COOKIE)
     return code
   } catch {
-    // Not in a mutable request scope. The invite can still be redeemed through
-    // the acceptHouseholdInvite mutation, so this is a downgrade, not a failure.
+    // Not a mutable request scope. acceptHouseholdInvite still works, so this is a downgrade, not a failure.
     return null
   }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // Cloud Run serves from a host next-auth doesn't recognize as trusted by
-  // default; trust it so the callback URL is inferred from the request host
-  // instead of a hardcoded NEXTAUTH_URL/AUTH_URL.
+  // Infer the callback URL from the request host — Cloud Run's host isn't trusted by default.
   trustHost: true,
   providers: [Google],
   session: { strategy: 'jwt' },
@@ -58,9 +50,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.userId = user.id
         token.householdId = user.householdId
       } else if (trigger === 'update' && token.userId) {
-        // Accepting an invite moves the user to a different household, which
-        // would otherwise leave this token pointing at a household that no
-        // longer exists. The client calls session.update() to land here.
+        // Accepting an invite moves the user to a different household, leaving this
+        // token stale. The client calls session.update() to land here.
         const user = await prisma.user.findUnique({
           where: { id: token.userId },
           select: { householdId: true },
@@ -70,8 +61,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token
     },
     async session({ session, token }) {
-      // Narrowed rather than cast: this callback's `session` is a union that
-      // includes AdapterSession, whose `userId` is a required string.
+      // Narrowed rather than cast: `session` is a union including AdapterSession,
+      // whose `userId` is a required string.
       if (token.userId) session.userId = token.userId
       if (token.householdId) session.householdId = token.householdId
       return session
