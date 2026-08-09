@@ -7,7 +7,9 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Link from 'next/link'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
+import { MemberAvatar } from '@/components/MemberAvatar'
 import { HouseholdProvider } from './household-context'
+import { Sidebar } from './sidebar'
 import { HouseholdDocument } from './household.queries'
 
 /**
@@ -72,27 +74,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             Homebase
           </Typography>
-          <Stack direction="row" spacing={2.5}>
-            {[
-              { href: '/budget', label: 'Budget' },
-              { href: '/transactions', label: 'Transactions' },
-              { href: '/settings', label: 'Settings' },
-            ].map((link) => (
-              <Typography
-                key={link.href}
-                component={Link}
-                href={link.href}
-                variant="body2"
-                sx={{ color: 'text.secondary', textDecoration: 'none' }}
-              >
-                {link.label}
-              </Typography>
-            ))}
-          </Stack>
+          {/* Navigation lives in the sidebar; the bar keeps identity only. */}
+          <MemberAvatar member={me} size={28} />
         </Stack>
-        <Box component="main" sx={{ flex: 1, p: 3 }}>
-          {children}
-        </Box>
+        <Stack direction="row" sx={{ flex: 1 }}>
+          <Sidebar />
+          <Box component="main" sx={{ flex: 1, minWidth: 0, p: 3 }}>
+            {children}
+          </Box>
+        </Stack>
       </Stack>
     </HouseholdProvider>
   )
