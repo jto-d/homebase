@@ -62,7 +62,11 @@ export function decideAcceptInvite(facts: AcceptInviteFacts): AcceptInviteDecisi
  * **Every model carrying `householdId` must add a `tx.<model>.updateMany` line
  * here**, or a solo user's data is stranded on the household deleted when they
  * pair up. Child rows need none — `TransactionSplit` travels with its
- * transaction, and `ownerId` is untouched because the owner is moving too.
+ * transaction and `BudgetNodeMonth` with its node, and `ownerId` is untouched
+ * because the owner is moving too.
+ *
+ * `BudgetNode.parentId` needs no fixup either: a whole tree moves at once, so
+ * every parent lands in the new household alongside its children.
  */
 export async function migrateHouseholdRecords(
   tx: Prisma.TransactionClient,
@@ -70,7 +74,8 @@ export async function migrateHouseholdRecords(
   toHouseholdId: string
 ): Promise<void> {
   const move = { where: { householdId: fromHouseholdId }, data: { householdId: toHouseholdId } }
-  await tx.budget.updateMany(move)
+  await tx.budgetNode.updateMany(move)
+  await tx.incomeSource.updateMany(move)
   await tx.transaction.updateMany(move)
 }
 

@@ -1,14 +1,18 @@
 import { graphql } from '@/gql'
 
 /**
- * One document for the page: the transaction list plus the budgets it files
+ * One document for the page: the transaction list plus the budget nodes it files
  * into, since every row needs to turn a budgetId into a name.
+ *
+ * `budgetLeaves` rather than one person's month — filing spans both members'
+ * trees, and only a leaf can be filed into.
  */
 export const TransactionsMonthDocument = graphql(`
   query TransactionsMonth($year: Int!, $month: Int!) {
-    budgetMonth(year: $year, month: $month) {
+    budgetLeaves {
       id
-      name
+      label
+      path
       ownerId
     }
     transactions(year: $year, month: $month) {

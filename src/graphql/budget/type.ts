@@ -1,17 +1,5 @@
 import { builder } from '../builder'
 
-builder.prismaObject('Budget', {
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    name: t.exposeString('name'),
-    // Owner is exposed as a raw id, not a relation: the client already holds
-    // both members from useHousehold(), so it resolves the name, colour and
-    // avatar locally rather than paying for a nested user on every row.
-    ownerId: t.exposeString('ownerId'),
-    amount: t.float({ resolve: (budget) => budget.amount.toNumber() }),
-  }),
-})
-
 builder.prismaObject('Transaction', {
   fields: (t) => ({
     id: t.exposeID('id'),
@@ -35,18 +23,70 @@ builder.prismaObject('TransactionSplit', {
 })
 
 /**
- * A budget plus what was spent against it in one month.
+ * One node of the budget tree, resolved for a specific month.
  *
- * Flat rather than a `Budget` with a month-scoped field, because `spent` only
- * means anything relative to the month that was asked for — putting it on the
- * Prisma object would invite reading it without one.
+ * Deliberately *not* a `prismaObject`. `BudgetNode.budget` is a rolling default
+ * that a `BudgetNodeMonth` row may override, and `spent`/`ytd` are derived from
+ * transactions — none of the three mean anything without a month in scope, and
+ * a Prisma object would invite reading them without one.
  */
-export const BudgetSpend = builder.simpleObject('BudgetSpend', {
+export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
   fields: (t) => ({
     id: t.string(),
-    name: t.string(),
-    ownerId: t.string(),
-    amount: t.float(),
+    /// null = a top-level group. The client trees the flat list up itself.
+    parentId: t.string({ nullable: true }),
+    label: t.string(),
+    icon: t.string(),
+    position: t.int(),
+    /// This month's override, or the rolling default. Ignore it on a node with
+    /// children — that one is the sum of its children (see `buildBudgetTree`).
+    budget: t.float(),
+    /// Set = a savings node, drawing a year-to-date bar against this limit.
+    annualLimit: t.float({ nullable: true }),
+    /// This node's *own* splits for the month. Children are added on top by the
+    /// client, so a node filed against before it grew children keeps its history.
     spent: t.float(),
+    /// January through the selected month. Zero unless `annualLimit` is set.
+    ytd: t.float(),
+  }),
+})
+
+export const IncomeSourcePayload = builder.simpleObject('IncomeSourcePayload', {
+  fields: (t) => ({
+    id: t.string(),
+    label: t.string(),
+    sub: t.string({ nullable: true }),
+    amount: t.float(),
+    position: t.int(),
+  }),
+})
+
+/** Everything one person's Monthly view needs, in one round trip. */
+export const BudgetMonthPayload = builder.simpleObject('BudgetMonthPayload', {
+  fields: (t) => ({
+    nodes: t.field({ type: [BudgetNodePayload] }),
+    income: t.field({ type: [IncomeSourcePayload] }),
+    /// The household's budget start, if one is set — the stepper's back-stop.
+    budgetStartYear: t.int({ nullable: true }),
+    budgetStartMonth: t.int({ nullable: true }),
+  }),
+})
+
+/**
+ * A node a transaction can be filed into: household-wide, both people's trees,
+ * leaves only.
+ *
+ * Both people's, because splitting one charge across two budgets is the single
+ * place the separate trees meet. Leaves only, because filing against a parent
+ * would count the money twice — once on its own and once through the roll-up.
+ */
+export const BudgetLeafPayload = builder.simpleObject('BudgetLeafPayload', {
+  fields: (t) => ({
+    id: t.string(),
+    label: t.string(),
+    /// Ancestors included: `"Food › Groceries"`. Two people can both have a
+    /// "Gas", and the bare label would make the picker a coin flip.
+    path: t.string(),
+    ownerId: t.string(),
   }),
 })

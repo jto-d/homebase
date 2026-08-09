@@ -1,225 +1,254 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@urql/next'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Card from '@mui/material/Card'
 import CircularProgress from '@mui/material/CircularProgress'
-import IconButton from '@mui/material/IconButton'
-import LinearProgress from '@mui/material/LinearProgress'
-import MenuItem from '@mui/material/MenuItem'
-import Stack from '@mui/material/Stack'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
+import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined'
 import { MemberAvatar } from '@/components/MemberAvatar'
-import { MonthStepper, currentMonth } from '@/components/MonthStepper'
+import { MonthStepper, currentMonth, type MonthSel } from '@/components/MonthStepper'
+import { AppDialog, Row, Segmented, Stack } from '@/components/ui'
+import { budgetTotals, buildBudgetTree, type BudgetNodeData } from '@/lib/budget'
+import { NEW_CATEGORY, NEW_GROUP, NEW_INCOME, NEW_LINE_ITEM } from '@/lib/budgetDefaults'
+import { monthLabel } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
-import { fmtMoney } from '@/lib/format'
 import { useHousehold } from '../household-context'
+import { BudgetLedger, type LedgerHandlers } from './budget-ledger'
+import { DeleteNodeDialog, type PendingDelete } from './delete-node-dialog'
+import { IncomePanel } from './income-panel'
+import { SummaryStrip } from './summary-strip'
 import {
+  AddBudgetNodeDocument,
+  AddIncomeSourceDocument,
   BudgetMonthDocument,
-  CreateBudgetDocument,
-  DeleteBudgetDocument,
-  UpdateBudgetDocument,
+  DeleteBudgetNodeDocument,
+  RemoveIncomeSourceDocument,
+  RenameBudgetNodeDocument,
+  RenameIncomeSourceDocument,
+  SetBudgetStartDocument,
+  SetIncomeAmountDocument,
+  SetNodeAnnualLimitDocument,
+  SetNodeBudgetDocument,
 } from './budget.queries'
 
-type BudgetRow = {
-  id: string
-  name: string
-  ownerId: string
-  amount: number
-  spent: number
-}
+type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
 
 export default function BudgetPage() {
   const { me, members } = useHousehold()
+
   const [sel, setSel] = useState(currentMonth)
+  const [ownerId, setOwnerId] = useState(me.id)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
+  const [confirmStart, setConfirmStart] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [{ data, fetching }, refetch] = useQuery({
     query: BudgetMonthDocument,
-    variables: sel,
+    variables: { ...sel, ownerId },
+    requestPolicy: 'cache-and-network',
   })
-  const [, createBudget] = useMutation(CreateBudgetDocument)
-  const [, updateBudget] = useMutation(UpdateBudgetDocument)
-  const [, deleteBudget] = useMutation(DeleteBudgetDocument)
 
-  const [name, setName] = useState('')
-  const [amount, setAmount] = useState('')
-  const [ownerId, setOwnerId] = useState(me.id)
+  const [, addNode] = useMutation(AddBudgetNodeDocument)
+  const [, renameNode] = useMutation(RenameBudgetNodeDocument)
+  const [, deleteNode] = useMutation(DeleteBudgetNodeDocument)
+  const [, setNodeBudget] = useMutation(SetNodeBudgetDocument)
+  const [, setAnnualLimit] = useMutation(SetNodeAnnualLimitDocument)
+  const [, addIncome] = useMutation(AddIncomeSourceDocument)
+  const [, renameIncome] = useMutation(RenameIncomeSourceDocument)
+  const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
+  const [, removeIncome] = useMutation(RemoveIncomeSourceDocument)
+  const [, setBudgetStart] = useMutation(SetBudgetStartDocument)
 
-  const reload = () => refetch({ requestPolicy: 'network-only' })
+  /**
+   * Amounts committed locally but not yet echoed by the server.
+   *
+   * `EditableMoney` renders from its `value` prop, so without this the figure
+   * snaps back to the old one for the length of a round trip. Applied before the
+   * tree is built, so an edited line item rolls up into its parent and into the
+   * summary strip with no extra bookkeeping.
+   */
+  const [overrides, setOverrides] = useState<Record<string, number>>({})
+  const seen = useRef(data?.budgetMonth)
+  useEffect(() => {
+    if (data?.budgetMonth !== seen.current) {
+      seen.current = data?.budgetMonth
+      setOverrides({})
+    }
+  }, [data?.budgetMonth])
 
-  /** urql surfaces the resolver's message on graphQLErrors; keep the network one as a fallback. */
-  function report(result: { error?: { graphQLErrors: readonly { message: string }[]; message: string } }) {
-    if (!result.error) {
+  const month = data?.budgetMonth
+  const budgetStart: MonthSel | null =
+    month?.budgetStartYear != null && month.budgetStartMonth != null
+      ? { year: month.budgetStartYear, month: month.budgetStartMonth }
+      : null
+  const isCurrentStart =
+    budgetStart != null && budgetStart.year === sel.year && budgetStart.month === sel.month
+
+  const nodes: BudgetNodeData[] = useMemo(
+    () =>
+      (month?.nodes ?? []).map((n) => ({
+        ...n,
+        budget: overrides[n.id] ?? n.budget,
+        annualLimit: overrides[`limit:${n.id}`] ?? n.annualLimit,
+      })),
+    [month?.nodes, overrides]
+  )
+  const income = useMemo(
+    () => (month?.income ?? []).map((i) => ({ ...i, amount: overrides[i.id] ?? i.amount })),
+    [month?.income, overrides]
+  )
+
+  const roots = useMemo(() => buildBudgetTree(nodes), [nodes])
+  const totals = useMemo(() => budgetTotals(roots, income), [roots, income])
+
+  /** Apply the optimistic value, fire, surface any message, then resync. */
+  async function run(fire: () => Promise<MutationResult>, optimistic?: { key: string; value: number }) {
+    if (optimistic) setOverrides((prev) => ({ ...prev, [optimistic.key]: optimistic.value }))
+    const result = await fire()
+    if (result.error) {
+      setError(result.error.graphQLErrors[0]?.message ?? result.error.message)
+      // Drop the optimistic value — the server did not take it.
+      if (optimistic) setOverrides(({ [optimistic.key]: _, ...rest }) => rest)
+    } else {
       setError(null)
-      return true
     }
-    setError(result.error.graphQLErrors[0]?.message ?? result.error.message)
-    return false
+    refetch({ requestPolicy: 'network-only' })
   }
 
-  async function handleCreate() {
-    const value = Number(amount)
-    if (!name.trim() || !Number.isFinite(value)) {
-      setError('Enter a name and an amount')
-      return
-    }
-    if (report(await createBudget({ name, amount: value, ownerId }))) {
-      setName('')
-      setAmount('')
-      reload()
-    }
+  const handlers: LedgerHandlers = {
+    onAddGroup: () => run(() => addNode({ ownerId, parentId: null, ...NEW_GROUP })),
+    onAddChild: (parentId) => {
+      // Depth decides the label: a child of a group is a category, a child of a
+      // category is a line item.
+      const isGroup = nodes.find((n) => n.id === parentId)?.parentId == null
+      setCollapsed((prev) => ({ ...prev, [parentId]: false }))
+      return run(() => addNode({ ownerId, parentId, ...(isGroup ? NEW_CATEGORY : NEW_LINE_ITEM) }))
+    },
+    onRename: (id, label) => run(() => renameNode({ id, label })),
+    onDelete: (node) => setPendingDelete(node),
+    onBudget: (id, budget) => run(() => setNodeBudget({ id, ...sel, budget }), { key: id, value: budget }),
+    onAnnualLimit: (id, annualLimit) =>
+      run(() => setAnnualLimit({ id, annualLimit }), { key: `limit:${id}`, value: annualLimit }),
+    onToggle: (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] })),
   }
 
-  async function handleAmount(row: BudgetRow, next: string) {
-    const value = Number(next)
-    if (!Number.isFinite(value) || value === row.amount) return
-    if (report(await updateBudget({ id: row.id, amount: value }))) reload()
-  }
-
-  async function handleDelete(id: string) {
-    if (report(await deleteBudget({ id }))) reload()
-  }
-
-  const budgets: BudgetRow[] = data?.budgetMonth ?? []
+  const personOptions = members.map((m) => ({
+    value: m.id,
+    label: memberLabel(m) + (m.id === me.id ? ' (you)' : ''),
+    icon: <MemberAvatar member={m} size={18} />,
+  }))
 
   return (
-    <Stack spacing={3} sx={{ maxWidth: 720, mx: 'auto' }}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Budget
-      </Typography>
+    <Stack gap={3} sx={{ maxWidth: 1180, mx: 'auto' }}>
+      <Row justify="between" gap={1.5} wrap>
+        <Typography variant="h5" sx={{ fontSize: 21 }}>
+          Budget
+        </Typography>
+        <Row gap={1.25} wrap>
+          {members.length > 1 && <Segmented value={ownerId} onChange={setOwnerId} options={personOptions} />}
+          <MonthStepper value={sel} onChange={setSel} min={budgetStart} />
+          <Button
+            size="small"
+            startIcon={<FlagOutlinedIcon sx={{ fontSize: 14 }} />}
+            onClick={() => setConfirmStart(true)}
+            disabled={isCurrentStart}
+            title={isCurrentStart ? 'This is your budget start month' : 'Mark this month as the budget start'}
+            sx={{
+              textTransform: 'none',
+              fontSize: 12,
+              fontWeight: 500,
+              height: 38,
+              color: isCurrentStart ? 'primary.main' : 'text.secondary',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: '9px',
+              px: 1.25,
+            }}
+          >
+            {isCurrentStart ? 'Budget start' : 'Set as start'}
+          </Button>
+        </Row>
+      </Row>
 
-      <MonthStepper value={sel} onChange={setSel} />
-
-      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-
-      {fetching && !data ? (
-        <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        // One card per member: budgets always belong to exactly one person, so
-        // the owner is the natural grouping rather than a badge on each row.
-        members.map((member) => {
-          const owned = budgets.filter((b) => b.ownerId === member.id)
-          const totalBudget = owned.reduce((sum, b) => sum + b.amount, 0)
-          const totalSpent = owned.reduce((sum, b) => sum + b.spent, 0)
-
-          return (
-            <Card key={member.id} sx={{ p: 3 }}>
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-                  <MemberAvatar member={member} size={28} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
-                    {memberLabel(member)}
-                    {member.id === me.id && ' (you)'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    {fmtMoney(totalSpent)} of {fmtMoney(totalBudget)}
-                  </Typography>
-                </Stack>
-
-                {owned.length === 0 && (
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    No budgets yet.
-                  </Typography>
-                )}
-
-                {owned.map((row) => {
-                  const left = row.amount - row.spent
-                  const over = left < 0
-                  return (
-                    <Stack key={row.id} spacing={0.5}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                        <Typography variant="body2" sx={{ flex: 1, fontWeight: 500 }}>
-                          {row.name}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                          {fmtMoney(row.spent)} /
-                        </Typography>
-                        <TextField
-                          size="small"
-                          defaultValue={row.amount}
-                          onBlur={(e) => handleAmount(row, e.target.value)}
-                          slotProps={{ htmlInput: { inputMode: 'decimal', style: { width: 64 } } }}
-                        />
-                        <IconButton
-                          size="small"
-                          aria-label={`Delete ${row.name}`}
-                          onClick={() => handleDelete(row.id)}
-                        >
-                          <DeleteOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Stack>
-                      <LinearProgress
-                        variant="determinate"
-                        // The bar caps at 100% while the "left" figure below carries
-                        // the overspend, so an outlier can't squash every other row.
-                        value={row.amount > 0 ? Math.min(100, (row.spent / row.amount) * 100) : 0}
-                        color={over ? 'error' : 'primary'}
-                        sx={{ height: 6, borderRadius: 3 }}
-                      />
-                      <Typography
-                        variant="caption"
-                        sx={{ color: over ? 'error.main' : 'text.secondary' }}
-                      >
-                        {over ? `${fmtMoney(-left)} over` : `${fmtMoney(left)} left`}
-                      </Typography>
-                    </Stack>
-                  )
-                })}
-              </Stack>
-            </Card>
-          )
-        })
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)}>
+          {error}
+        </Alert>
       )}
 
-      <Card sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-            Add a budget
+      {fetching && !month ? (
+        <Row justify="center" sx={{ py: 8 }}>
+          <CircularProgress />
+        </Row>
+      ) : (
+        <>
+          <SummaryStrip totals={totals} />
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 344px' },
+              gap: 3,
+              alignItems: 'start',
+            }}
+          >
+            <BudgetLedger roots={roots} totals={totals} collapsed={collapsed} handlers={handlers} />
+            <IncomePanel
+              income={income}
+              total={totals.income}
+              onAdd={() => run(() => addIncome({ ownerId, ...NEW_INCOME, amount: 0 }))}
+              onRename={(id, label) => run(() => renameIncome({ id, label }))}
+              onSetAmount={(id, amount) => run(() => setIncomeAmount({ id, amount }), { key: id, value: amount })}
+              onRemove={(id) => run(() => removeIncome({ id }))}
+            />
+          </Box>
+        </>
+      )}
+
+      <DeleteNodeDialog
+        node={pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => {
+          const id = pendingDelete?.id
+          setPendingDelete(null)
+          if (id) run(() => deleteNode({ id }))
+        }}
+      />
+
+      <AppDialog
+        open={confirmStart}
+        onClose={() => setConfirmStart(false)}
+        title="Set budget start"
+        subtitle={monthLabel(sel.year, sel.month)}
+        width={400}
+      >
+        <Box sx={{ px: '22px', pb: '4px' }}>
+          <Typography variant="body" sx={{ color: 'grey.500', lineHeight: 1.5 }}>
+            This marks the month your budget begins. Months before it are hidden from the stepper, for both of
+            you.
           </Typography>
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Name"
-              size="small"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="Monthly"
-              size="small"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-              sx={{ width: 110 }}
-            />
-            <TextField
-              label="Whose"
-              size="small"
-              select
-              value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-              sx={{ width: 140 }}
-            >
-              {members.map((m) => (
-                <MenuItem key={m.id} value={m.id}>
-                  {memberLabel(m)}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-          <Button variant="contained" onClick={handleCreate} sx={{ alignSelf: 'flex-start' }}>
-            Add budget
+        </Box>
+        <Row justify="end" gap="10px" sx={{ p: '16px 22px 20px' }}>
+          <Button variant="subtle" size="small" onClick={() => setConfirmStart(false)}>
+            Cancel
           </Button>
-        </Stack>
-      </Card>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<FlagOutlinedIcon sx={{ fontSize: 15 }} />}
+            onClick={() => {
+              setConfirmStart(false)
+              run(() => setBudgetStart(sel))
+            }}
+          >
+            Set start
+          </Button>
+        </Row>
+      </AppDialog>
     </Stack>
   )
 }
