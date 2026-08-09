@@ -4,29 +4,24 @@ import { prisma } from './prisma'
 import { UserFacingError } from './errors'
 import { nextMemberColor, MEMBER_COLORS } from './members'
 
-/**
- * Households are capped at two people for v1. Pairing is permanent — there is
- * no leave/unpair flow, so this cap is only ever enforced on the way in.
- */
+/** v1 cap. Pairing is permanent (no leave/unpair), so this is only enforced on the way in. */
 export const HOUSEHOLD_MAX_MEMBERS = 2
 
-/** Invite codes are single-use and never expire, so they only need to be unguessable. */
+/** Codes are single-use and never expire, so they only need to be unguessable. */
 export function generateInviteCode(): string {
   return randomBytes(9).toString('base64url')
 }
 
 // ---------------------------------------------------------------------------
-// Pure decision logic — extracted so the rules can be unit tested without a DB.
+// Pure decision logic — no DB.
 // ---------------------------------------------------------------------------
 
 export interface AcceptInviteFacts {
   /** The invite being redeemed, or null when the code matches nothing. */
   invite: { status: 'PENDING' | 'ACCEPTED'; householdId: string } | null
-  /** How many members the invite's household already has. */
   targetMemberCount: number
   /** The household the accepting user is currently in. */
   userHouseholdId: string
-  /** How many members that household already has. */
   userHouseholdMemberCount: number
 }
 
@@ -35,9 +30,8 @@ export type AcceptInviteDecision = { ok: true } | { ok: false; error: string }
 /**
  * Whether an invite may be redeemed, and if not, the message the user sees.
  *
- * Note the ordering: "already used" is reported before "household full",
- * because a used invite is the far more likely thing a user is looking at and
- * it explains the situation better than a capacity message.
+ * Ordering matters: "already used" comes before "household full" — it is the
+ * likelier case and explains the situation better.
  */
 export function decideAcceptInvite(facts: AcceptInviteFacts): AcceptInviteDecision {
   const { invite, targetMemberCount, userHouseholdId, userHouseholdMemberCount } = facts
@@ -65,14 +59,10 @@ export function decideAcceptInvite(facts: AcceptInviteFacts): AcceptInviteDecisi
 /**
  * Move every household-scoped record from one household to another.
  *
- * **Every domain model that carries `householdId` (CreditCard, Perk,
- * Subscription, …) must add one `tx.<model>.updateMany` line here**, or a solo
- * user's data will be stranded on the household that gets deleted when they
- * pair up.
- *
- * Child rows need no line: `TransactionSplit` has no `householdId` and travels
- * with its transaction. `Budget.ownerId` is likewise untouched — the owner is
- * moving to the new household too, so their budgets stay theirs.
+ * **Every model carrying `householdId` must add a `tx.<model>.updateMany` line
+ * here**, or a solo user's data is stranded on the household deleted when they
+ * pair up. Child rows need none — `TransactionSplit` travels with its
+ * transaction, and `ownerId` is untouched because the owner is moving too.
  */
 export async function migrateHouseholdRecords(
   tx: Prisma.TransactionClient,
@@ -92,26 +82,22 @@ async function claimInvite(
   householdId: string
 ): Promise<boolean> {
   // The conditional status transition IS the single-use lock — a read-then-write
-  // would let two simultaneous redemptions both see PENDING. If this updates
-  // zero rows, someone else got there first.
+  // would let two redemptions both see PENDING. Zero rows means someone beat us.
   const claimed = await tx.householdInvite.updateMany({
     where: { code, status: 'PENDING' },
     data: { status: 'ACCEPTED', acceptedByUserId, acceptedAt: new Date() },
   })
   if (claimed.count === 0) return false
 
-  // The household is full now, so every other outstanding code for it is dead.
-  // The schema has no REVOKED status (revocation is out of scope for v1), so
-  // deletion is how invalidation is expressed.
+  // Household is full, so every other outstanding code is dead. No REVOKED status
+  // in the schema (out of scope for v1), so deletion expresses invalidation.
   await tx.householdInvite.deleteMany({ where: { householdId, status: 'PENDING' } })
   return true
 }
 
 /**
- * Create a household containing exactly this user.
- *
- * Every user must land in a household immediately — `User.householdId` is
- * non-null — so solo users get full app access with no gating on pairing.
+ * Create a household containing exactly this user. `User.householdId` is non-null,
+ * so solo users get full app access with nothing gated on pairing.
  */
 async function createSoloUser(email: string, name: string | null): Promise<User> {
   return prisma.$transaction(async (tx) => {
@@ -123,9 +109,8 @@ async function createSoloUser(email: string, name: string | null): Promise<User>
 }
 
 /**
- * Create a brand-new user directly inside an invite's household, returning
- * null if the invite turns out not to be redeemable (used, unknown, or the
- * household filled up in the meantime) so the caller can fall back to solo.
+ * Create a new user directly inside an invite's household. Returns null if the
+ * invite isn't redeemable (used, unknown, or filled up), so the caller falls back to solo.
  */
 async function createUserIntoInvite(
   email: string,
@@ -156,9 +141,8 @@ async function createUserIntoInvite(
         },
       })
 
-      // Losing the race here means the row we just created belongs to a
-      // household that is now full — throw so the transaction unwinds it, and
-      // let the caller start over with a solo household.
+      // Losing the race means the row we just created sits in a now-full household.
+      // Throw so the transaction unwinds it and the caller retries solo.
       if (!(await claimInvite(tx, inviteCode, user.id, invite.householdId))) {
         throw new InviteRaceLost()
       }
@@ -174,8 +158,8 @@ async function createUserIntoInvite(
 class InviteRaceLost extends Error {}
 
 /**
- * Mint a fresh invite code for a household. Multiple codes may be outstanding
- * at once; they are all invalidated together the moment the household fills.
+ * Mint a fresh invite code. Multiple codes may be outstanding at once; all are
+ * invalidated together the moment the household fills.
  */
 export async function createInvite(input: {
   householdId: string
@@ -186,8 +170,8 @@ export async function createInvite(input: {
     throw new UserFacingError('Your household is already full')
   }
 
-  // 72 bits of randomness makes a collision vanishingly unlikely, but `code` is
-  // unique, so retry rather than surface a raw constraint violation.
+  // 72 bits makes collision vanishingly unlikely, but `code` is unique — retry
+  // rather than surface a raw constraint violation.
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateInviteCode()
     const taken = await prisma.householdInvite.findUnique({ where: { code }, select: { id: true } })
@@ -201,13 +185,12 @@ export async function createInvite(input: {
 }
 
 /**
- * The single entry point used by the Auth.js `jwt` callback on first sign-in.
+ * The single entry point for the Auth.js `jwt` callback on first sign-in.
  *
- * When the partner arrives through an invite link, `inviteCode` carries the
- * code across the OAuth round trip so they are created directly into the
- * inviter's household and never hold a solo household even briefly. Without a
- * usable code they get their own household, and the ordinary
- * `acceptInvite` path can still merge them later.
+ * `inviteCode` carries across the OAuth round trip so a partner is created
+ * directly into the inviter's household, never briefly holding a solo one.
+ * Without a usable code they get their own household and `acceptInvite` can
+ * still merge them later.
  */
 export async function upsertUserForSignIn(input: {
   email: string
@@ -226,10 +209,8 @@ export async function upsertUserForSignIn(input: {
 }
 
 /**
- * Redeem an invite on behalf of an existing signed-in user: merge their
- * household into the inviter's, then delete the household they came from.
- *
- * Returns the id of the household they now belong to.
+ * Redeem an invite for an existing signed-in user: merge their household into
+ * the inviter's, delete the one they came from, return the new household id.
  */
 export async function acceptInvite(input: { code: string; userId: string }): Promise<string> {
   return prisma.$transaction(async (tx) => {
@@ -275,9 +256,8 @@ export async function acceptInvite(input: { code: string; userId: string }): Pro
       },
     })
 
-    // Only safe because the user has already been moved off it — Household
-    // cascades to its members, so deleting a still-occupied household would
-    // delete the person.
+    // Only safe because the user was already moved off it: Household cascades to
+    // members, so deleting an occupied one would delete the person.
     const remaining = await tx.user.count({ where: { householdId: previousHouseholdId } })
     if (remaining === 0) {
       await tx.household.delete({ where: { id: previousHouseholdId } })

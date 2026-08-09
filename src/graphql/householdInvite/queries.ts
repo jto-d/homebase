@@ -9,10 +9,9 @@ builder.queryField('householdInvitePreview', (t) =>
   t.field({
     type: InvitePreview,
     args: { code: t.arg.string({ required: true }) },
-    // The one public resolver in the schema: it renders the invite landing
-    // page, which the partner sees before they have signed in. It deliberately
-    // does not call requireAuth — and it exposes only the inviter's display
-    // name, never their email or anything about the household's contents.
+    // The one public resolver: it renders the invite landing page before the
+    // partner has signed in, so no requireAuth. Exposes only the inviter's display
+    // name — never their email or anything about the household's contents.
     resolve: async (_root, { code }) => {
       const invite = await prisma.householdInvite.findUnique({
         where: { code },

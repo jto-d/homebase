@@ -11,9 +11,9 @@ export interface Member {
 }
 
 /**
- * The "whose is whose" primitive. Every later feature (card ownership tags,
- * budget attribution, split rows) renders member identity through this, so a
- * person looks the same everywhere in the app.
+ * The "whose is whose" primitive. Every later feature (ownership tags, budget
+ * attribution, split rows) renders identity through this, so a person looks the
+ * same everywhere.
  */
 export function MemberAvatar({ member, size = 32 }: { member: Member; size?: number }) {
   return (

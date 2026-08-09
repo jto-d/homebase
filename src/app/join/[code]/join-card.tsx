@@ -73,8 +73,7 @@ export function JoinCard({ code }: { code: string }) {
   }
 
   async function handleSignIn() {
-    // Carry the code through the OAuth round trip so a brand-new account is
-    // created straight into this household.
+    // Carry the code through OAuth so a new account is created into this household.
     await stashInviteCode(code)
     await signIn('google', { callbackUrl: `/join/${code}` })
   }
@@ -88,8 +87,8 @@ export function JoinCard({ code }: { code: string }) {
       setJoining(false)
       return
     }
-    // The user's householdId just changed; refresh the JWT before navigating
-    // so the gated layout and the shell agree on which household this is.
+    // householdId just changed — refresh the JWT before navigating so the gated
+    // layout and the shell agree on which household this is.
     await update()
     router.push('/')
   }

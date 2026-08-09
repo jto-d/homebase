@@ -15,9 +15,8 @@ export const builder = new SchemaBuilder<{
   plugins: [PrismaPlugin, SimpleObjectsPlugin],
   prisma: {
     client: prisma,
-    // Required under Prisma 7 — the old client._runtimeDataModel path is gone,
-    // and without this the builder throws "Model 'X' is missing required
-    // datamodel information".
+    // Required under Prisma 7 — client._runtimeDataModel is gone. Without this:
+    // "Model 'X' is missing required datamodel information".
     dmmf: getDatamodel(),
     onUnusedQuery: process.env.NODE_ENV === 'production' ? null : 'warn',
   },

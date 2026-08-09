@@ -10,7 +10,7 @@ export interface HouseholdContextValue {
   /** The other member, or null while the household is still solo. */
   partner: Member | null
   members: Member[]
-  /** Re-run the household query from the network (after a mutation). */
+  /** Re-run the household query from the network, after a mutation. */
   refetch: () => void
 }
 
