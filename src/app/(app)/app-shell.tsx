@@ -73,14 +73,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             Homebase
           </Typography>
-          <Typography
-            component={Link}
-            href="/settings"
-            variant="body2"
-            sx={{ color: 'text.secondary', textDecoration: 'none' }}
-          >
-            Settings
-          </Typography>
+          <Stack direction="row" spacing={2.5}>
+            {[
+              { href: '/budget', label: 'Budget' },
+              { href: '/transactions', label: 'Transactions' },
+              { href: '/settings', label: 'Settings' },
+            ].map((link) => (
+              <Typography
+                key={link.href}
+                component={Link}
+                href={link.href}
+                variant="body2"
+                sx={{ color: 'text.secondary', textDecoration: 'none' }}
+              >
+                {link.label}
+              </Typography>
+            ))}
+          </Stack>
         </Stack>
         <Box component="main" sx={{ flex: 1, p: 3 }}>
           {children}
