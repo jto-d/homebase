@@ -24,10 +24,19 @@ model Household {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  members      User[]
-  invites      HouseholdInvite[]
-  budgets      Budget[]
-  transactions Transaction[]
+  /// The month the budget begins; months before it are hidden from the stepper.
+  /// Household-level rather than per-person on purpose: the two budgets are
+  /// separate, but the household started keeping one on a single date, and two
+  /// different back-stops would be a distinction without a difference.
+  /// 1-based month, like everywhere else in this app. Null = no bound yet.
+  budgetStartYear  Int?
+  budgetStartMonth Int?
+
+  members       User[]
+  invites       HouseholdInvite[]
+  budgetNodes   BudgetNode[]
+  incomeSources IncomeSource[]
+  transactions  Transaction[]
 }
 
 model User {
@@ -46,7 +55,8 @@ model User {
   createdInvites  HouseholdInvite[] @relation("CreatedBy")
   acceptedInvites HouseholdInvite[] @relation("AcceptedBy")
 
-  budgets          Budget[]
+  budgetNodes      BudgetNode[]
+  incomeSources    IncomeSource[]
   paidTransactions Transaction[]
 
   @@index([householdId])
@@ -79,28 +89,81 @@ model HouseholdInvite {
   @@index([createdByUserId])
 }
 
-/// A per-person monthly spending target.
+/// One node of a person's budget tree: a group, a category, or a line item —
+/// the same model at three depths. Depth is capped at 2 by `addBudgetNode`; the
+/// database does not enforce it.
 ///
-/// Unlike the rest of the app, `ownerId` is required rather than nullable: there
-/// are no joint budgets in v1. A shared cost is handled by splitting the
-/// transaction into both people's budgets instead. `householdId` is still the
-/// query scope, and either member can read and edit the other's budgets.
-model Budget {
-  id        String   @id @default(cuid())
-  name      String
-  /// Applies to every month. There are no per-month overrides in v1.
-  amount    Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
+/// The rule that governs the whole feature, and the reason this is one model
+/// rather than three: **a node with children derives its budget and spend from
+/// them; a leaf holds its own.** `buildBudgetTree` in src/lib/budget.ts is the
+/// single implementation.
+///
+/// Like the Budget it replaces, `ownerId` is required rather than nullable:
+/// there are no joint nodes. Each person's budget is entirely their own, and a
+/// shared cost is handled by splitting the transaction across both people's
+/// nodes. `householdId` remains the query scope — either member can read and
+/// edit the other's tree.
+model BudgetNode {
+  id          String   @id @default(cuid())
+  label       String
+  /// Icon slug resolved by CatGlyph; unknown slugs fall back to a banknote.
+  icon        String
+  position    Int
+  /// The rolling default, used for any month with no BudgetNodeMonth override.
+  budget      Decimal  @default(0) @db.Decimal(10, 2)
+  /// Set = this is a savings node, which draws a year-to-date bar against the
+  /// limit. There is no SavingsAccount model: savings is a shape, not a table.
+  annualLimit Decimal? @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
 
   householdId String
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   ownerId     String
   owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  parentId String?
+  parent   BudgetNode?  @relation("BudgetNodeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children BudgetNode[] @relation("BudgetNodeTree")
+
+  months BudgetNodeMonth[]
   splits TransactionSplit[]
 
-  @@unique([ownerId, name])
-  @@index([householdId])
+  @@index([householdId, ownerId, position])
+  @@index([parentId])
+}
+
+/// A per-month override of `BudgetNode.budget`. Absent means "use the rolling
+/// default", which is what keeps a budget you set once applying to every future
+/// month while last March stays exactly as it was.
+model BudgetNodeMonth {
+  id     String     @id @default(cuid())
+  nodeId String
+  node   BudgetNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  year   Int
+  /// 1-based, like every other month in this app.
+  month  Int
+  budget Decimal    @db.Decimal(10, 2)
+
+  @@unique([nodeId, year, month])
+}
+
+/// Net monthly income, per person. `sub` is the grey second line ("Net, monthly").
+///
+/// No month dimension: income is a standing figure, edited when it changes,
+/// rather than re-entered twelve times a year.
+model IncomeSource {
+  id       String  @id @default(cuid())
+  label    String
+  sub      String?
+  amount   Decimal @default(0) @db.Decimal(10, 2)
+  position Int
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, ownerId, position])
 }
 
 /// A single real-world charge. Spend is never stored on a Budget — it is derived
@@ -128,11 +191,16 @@ model Transaction {
   @@index([householdId, date])
 }
 
-/// One share of a transaction, filed against exactly one budget.
+/// One share of a transaction, filed against exactly one budget node.
+///
+/// This is the only place the two people's budgets meet: a shared cost is one
+/// transaction split across a node of each person's tree.
 ///
 /// Invariant: a transaction has either zero splits (unfiled — it counts against
 /// no budget) or splits summing exactly to its amount. Enforced in
 /// `validateSplits`, and `setTransactionSplits` is the only way to write these.
+/// Splits may only target *leaf* nodes; filing against a parent would be counted
+/// twice, once on its own and once through the roll-up.
 ///
 /// No `householdId` of its own: a child row is always reached through its
 /// transaction, which carries the scope, and is cascade-deleted with it.
@@ -140,11 +208,16 @@ model TransactionSplit {
   id            String      @id @default(cuid())
   transactionId String
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  /// Named `budgetId` rather than `nodeId` because it is what it always was —
+  /// the budget this share counts against. Only the target model changed.
+  ///
   /// Restrict, not Cascade: cascading would delete some of a transaction's splits
-  /// and leave the survivors summing to less than its amount. `deleteBudget`
-  /// refuses while splits reference the budget instead.
+  /// and leave the survivors summing to less than its amount. `deleteBudgetNode`
+  /// refuses while splits reference anything in the subtree instead — it has to
+  /// check the whole subtree, because deleting a group cascades to its children
+  /// and Postgres would then raise the violation from a row nobody named.
   budgetId      String
-  budget        Budget      @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+  budget        BudgetNode  @relation(fields: [budgetId], references: [id], onDelete: Restrict)
   amount        Decimal     @db.Decimal(10, 2)
 
   @@index([transactionId])

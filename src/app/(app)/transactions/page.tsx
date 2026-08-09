@@ -60,9 +60,11 @@ export default function TransactionsPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<SplitDraft[]>([])
 
-  const budgets = data?.budgetMonth ?? []
+  // Leaves across both members: a shared cost is one transaction split between
+  // two people's budgets, and only a leaf can be filed into.
+  const budgets = data?.budgetLeaves ?? []
   const transactions = data?.transactions ?? []
-  const budgetName = (id: string) => budgets.find((b) => b.id === id)?.name ?? 'Unknown budget'
+  const budgetName = (id: string) => budgets.find((b) => b.id === id)?.path ?? 'Unknown budget'
   const reload = () => refetch({ requestPolicy: 'network-only' })
 
   function report(result: { error?: { graphQLErrors: readonly { message: string }[]; message: string } }) {
@@ -191,7 +193,7 @@ export default function TransactionsPage() {
               <MenuItem value={UNFILED}>Unfiled</MenuItem>
               {budgets.map((b) => (
                 <MenuItem key={b.id} value={b.id}>
-                  {b.name}
+                  {b.path}
                 </MenuItem>
               ))}
             </TextField>
@@ -283,7 +285,7 @@ export default function TransactionsPage() {
                           >
                             {budgets.map((b) => (
                               <MenuItem key={b.id} value={b.id}>
-                                {b.name}
+                                {b.path}
                               </MenuItem>
                             ))}
                           </TextField>

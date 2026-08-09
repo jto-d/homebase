@@ -21,79 +21,255 @@ async function assertMember(householdId: string, userId: string): Promise<void> 
   if (member === 0) throw new UserFacingError('That person is not in your household')
 }
 
+/**
+ * Splits may only target leaves. A parent's spend is the sum of its children, so
+ * filing against one would count the money twice.
+ */
 async function assertBudgets(householdId: string, budgetIds: readonly string[]): Promise<void> {
   if (budgetIds.length === 0) return
-  const found = await prisma.budget.count({ where: { id: { in: [...budgetIds] }, householdId } })
-  if (found !== new Set(budgetIds).size) throw new UserFacingError('Budget not found')
+  const found = await prisma.budgetNode.count({
+    where: { id: { in: [...budgetIds] }, householdId, children: { none: {} } },
+  })
+  if (found !== new Set(budgetIds).size) {
+    throw new UserFacingError('Budget not found, or it has line items to file into instead')
+  }
+}
+
+/** A node and its descendants — the rows a delete would actually take with it. */
+async function subtreeIds(householdId: string, id: string): Promise<string[]> {
+  const children = await prisma.budgetNode.findMany({
+    where: { householdId, parentId: id },
+    select: { id: true },
+  })
+  const grandchildren = await prisma.budgetNode.findMany({
+    where: { householdId, parentId: { in: children.map((c) => c.id) } },
+    select: { id: true },
+  })
+  return [id, ...children.map((c) => c.id), ...grandchildren.map((g) => g.id)]
 }
 
 builder.mutationFields((t) => ({
-  createBudget: t.prismaField({
-    type: 'Budget',
+  /**
+   * Add a group (no parent), a category (parent is a group) or a line item
+   * (parent is a category). Depth stops at two: past that the ledger stops
+   * being a ledger and starts being a filesystem.
+   */
+  addBudgetNode: t.boolean({
     args: {
-      name: t.arg.string({ required: true }),
-      amount: t.arg.float({ required: true }),
-      ownerId: t.arg.string({ required: true, description: 'Budgets always belong to one member.' }),
+      ownerId: t.arg.string({ required: true }),
+      parentId: t.arg.string({ description: 'Omit for a top-level group.' }),
+      label: t.arg.string({ required: true }),
+      icon: t.arg.string({ required: true }),
     },
-    resolve: async (query, _root, { name, amount, ownerId }, ctx) => {
+    resolve: async (_root, { ownerId, parentId, label, icon }, ctx) => {
       const { householdId } = requireAuth(ctx)
-      const label = name.trim()
-      if (!label) throw new UserFacingError('Give the budget a name')
-      if (amount < 0) throw new UserFacingError('A budget cannot be negative')
+      const name = label.trim()
+      if (!name) throw new UserFacingError('Give it a name')
       await assertMember(householdId, ownerId)
 
-      // Same person, same name is the unique constraint. Check first so the user
-      // gets this sentence instead of a masked Prisma constraint violation.
-      const clash = await prisma.budget.count({ where: { ownerId, name: label } })
-      if (clash > 0) throw new UserFacingError(`There is already a "${label}" budget for that person`)
+      if (parentId != null) {
+        // Depth is measured through the grandparent: a parent that already has
+        // one is a line item, and a child of it would be the third level.
+        const parent = await prisma.budgetNode.findFirst({
+          where: { id: parentId, householdId, ownerId },
+          select: { parent: { select: { parentId: true } } },
+        })
+        if (!parent) throw new UserFacingError('Budget not found')
+        if (parent.parent?.parentId != null) {
+          throw new UserFacingError("Line items can't have their own line items")
+        }
+      }
 
-      return prisma.budget.create({
-        ...query,
-        data: { householdId, ownerId, name: label, amount },
+      // Append: the new row lands at the bottom of its list, where the person
+      // adding it is already looking.
+      const siblings = await prisma.budgetNode.count({
+        where: { householdId, ownerId, parentId: parentId ?? null },
       })
+
+      await prisma.budgetNode.create({
+        data: { householdId, ownerId, parentId: parentId ?? null, label: name, icon, position: siblings },
+      })
+      return true
     },
   }),
 
-  updateBudget: t.prismaField({
-    type: 'Budget',
-    args: {
-      id: t.arg.string({ required: true }),
-      name: t.arg.string(),
-      amount: t.arg.float(),
-    },
-    resolve: async (query, _root, { id, name, amount }, ctx) => {
+  renameBudgetNode: t.boolean({
+    args: { id: t.arg.string({ required: true }), label: t.arg.string({ required: true }) },
+    resolve: async (_root, { id, label }, ctx) => {
       const { householdId } = requireAuth(ctx)
-      if (amount != null && amount < 0) throw new UserFacingError('A budget cannot be negative')
-      const label = name?.trim()
-      if (name != null && !label) throw new UserFacingError('Give the budget a name')
+      const name = label.trim()
+      if (!name) throw new UserFacingError('Give it a name')
 
-      // updateMany, not update: it takes the householdId scope in the same
-      // statement, so an id from another household matches nothing.
-      const { count } = await prisma.budget.updateMany({
+      const { count } = await prisma.budgetNode.updateMany({
         where: { id, householdId },
-        data: { ...(label ? { name: label } : {}), ...(amount != null ? { amount } : {}) },
+        data: { label: name },
       })
       if (count === 0) throw new UserFacingError('Budget not found')
-
-      return prisma.budget.findUniqueOrThrow({ ...query, where: { id } })
+      return true
     },
   }),
 
-  /** Refuses while transactions still point at it — see the Restrict FK on TransactionSplit. */
-  deleteBudget: t.boolean({
+  /**
+   * Deletes the node and everything under it.
+   *
+   * The split check covers the whole subtree, not just this node: children
+   * cascade, so a filed grandchild would otherwise fail at the database as a
+   * foreign-key violation and reach the client as "Unexpected error."
+   */
+  deleteBudgetNode: t.boolean({
     args: { id: t.arg.string({ required: true }) },
     resolve: async (_root, { id }, ctx) => {
       const { householdId } = requireAuth(ctx)
+      const exists = await prisma.budgetNode.count({ where: { id, householdId } })
+      if (exists === 0) throw new UserFacingError('Budget not found')
 
-      const filed = await prisma.transactionSplit.count({ where: { budgetId: id, budget: { householdId } } })
+      const ids = await subtreeIds(householdId, id)
+      const filed = await prisma.transactionSplit.count({ where: { budgetId: { in: ids } } })
       if (filed > 0) {
         throw new UserFacingError(
-          `${filed} transaction${filed === 1 ? '' : 's'} still filed here — refile them first`
+          `${filed} transaction${filed === 1 ? '' : 's'} still filed under this — refile them first`
         )
       }
 
-      const { count } = await prisma.budget.deleteMany({ where: { id, householdId } })
+      await prisma.budgetNode.deleteMany({ where: { id, householdId } })
+      return true
+    },
+  }),
+
+  /**
+   * Set a node's budget for one month.
+   *
+   * Writes both the month override and the rolling default in one transaction:
+   * the number you type is what this month is, *and* what next month starts as,
+   * while the months already behind you keep whatever they were set to.
+   */
+  setNodeBudget: t.boolean({
+    args: {
+      id: t.arg.string({ required: true }),
+      year: t.arg.int({ required: true }),
+      month: t.arg.int({ required: true, description: '1-based: 1 = January.' }),
+      budget: t.arg.float({ required: true }),
+    },
+    resolve: async (_root, { id, year, month, budget }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (budget < 0) throw new UserFacingError('A budget cannot be negative')
+      if (month < 1 || month > 12) throw new UserFacingError('That month does not exist')
+
+      const node = await prisma.budgetNode.findFirst({
+        where: { id, householdId },
+        select: { _count: { select: { children: true } } },
+      })
+      if (!node) throw new UserFacingError('Budget not found')
+      if (node._count.children > 0) {
+        throw new UserFacingError('This is calculated from its line items')
+      }
+
+      await prisma.$transaction([
+        prisma.budgetNode.updateMany({ where: { id, householdId }, data: { budget } }),
+        prisma.budgetNodeMonth.upsert({
+          where: { nodeId_year_month: { nodeId: id, year, month } },
+          create: { nodeId: id, year, month, budget },
+          update: { budget },
+        }),
+      ])
+      return true
+    },
+  }),
+
+  /** Pass null to clear the limit, which makes it an ordinary node again. */
+  setNodeAnnualLimit: t.boolean({
+    args: { id: t.arg.string({ required: true }), annualLimit: t.arg.float() },
+    resolve: async (_root, { id, annualLimit }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (annualLimit != null && annualLimit < 0) throw new UserFacingError('A limit cannot be negative')
+
+      const { count } = await prisma.budgetNode.updateMany({
+        where: { id, householdId },
+        // A zero limit would render a bar that is always full; treat it as "none".
+        data: { annualLimit: annualLimit ? annualLimit : null },
+      })
       if (count === 0) throw new UserFacingError('Budget not found')
+      return true
+    },
+  }),
+
+  addIncomeSource: t.boolean({
+    args: {
+      ownerId: t.arg.string({ required: true }),
+      label: t.arg.string({ required: true }),
+      amount: t.arg.float({ required: true }),
+    },
+    resolve: async (_root, { ownerId, label, amount }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      const name = label.trim()
+      if (!name) throw new UserFacingError('Give the income source a name')
+      if (amount < 0) throw new UserFacingError('Income cannot be negative')
+      await assertMember(householdId, ownerId)
+
+      const siblings = await prisma.incomeSource.count({ where: { householdId, ownerId } })
+      await prisma.incomeSource.create({
+        data: { householdId, ownerId, label: name, amount, position: siblings },
+      })
+      return true
+    },
+  }),
+
+  renameIncomeSource: t.boolean({
+    args: { id: t.arg.string({ required: true }), label: t.arg.string({ required: true }) },
+    resolve: async (_root, { id, label }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      const name = label.trim()
+      if (!name) throw new UserFacingError('Give the income source a name')
+
+      const { count } = await prisma.incomeSource.updateMany({
+        where: { id, householdId },
+        data: { label: name },
+      })
+      if (count === 0) throw new UserFacingError('Income source not found')
+      return true
+    },
+  }),
+
+  setIncomeAmount: t.boolean({
+    args: { id: t.arg.string({ required: true }), amount: t.arg.float({ required: true }) },
+    resolve: async (_root, { id, amount }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (amount < 0) throw new UserFacingError('Income cannot be negative')
+
+      const { count } = await prisma.incomeSource.updateMany({
+        where: { id, householdId },
+        data: { amount },
+      })
+      if (count === 0) throw new UserFacingError('Income source not found')
+      return true
+    },
+  }),
+
+  removeIncomeSource: t.boolean({
+    args: { id: t.arg.string({ required: true }) },
+    resolve: async (_root, { id }, ctx) => {
+      const { count } = await prisma.incomeSource.deleteMany({
+        where: { id, householdId: requireAuth(ctx).householdId },
+      })
+      if (count === 0) throw new UserFacingError('Income source not found')
+      return true
+    },
+  }),
+
+  /** Marks the month the budget begins. Household-wide — see the schema comment. */
+  setBudgetStart: t.boolean({
+    args: {
+      year: t.arg.int({ required: true }),
+      month: t.arg.int({ required: true, description: '1-based: 1 = January.' }),
+    },
+    resolve: async (_root, { year, month }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (month < 1 || month > 12) throw new UserFacingError('That month does not exist')
+
+      await prisma.household.update({
+        where: { id: householdId },
+        data: { budgetStartYear: year, budgetStartMonth: month },
+      })
       return true
     },
   }),

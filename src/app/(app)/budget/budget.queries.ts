@@ -1,36 +1,92 @@
 import { graphql } from '@/gql'
 
+/**
+ * One person's whole month. The node list arrives flat; `buildBudgetTree` shapes
+ * it and rolls the money up.
+ */
 export const BudgetMonthDocument = graphql(`
-  query BudgetMonth($year: Int!, $month: Int!) {
-    budgetMonth(year: $year, month: $month) {
-      id
-      name
-      ownerId
-      amount
-      spent
+  query BudgetMonth($year: Int!, $month: Int!, $ownerId: String!) {
+    budgetMonth(year: $year, month: $month, ownerId: $ownerId) {
+      budgetStartYear
+      budgetStartMonth
+      nodes {
+        id
+        parentId
+        label
+        icon
+        position
+        budget
+        annualLimit
+        spent
+        ytd
+      }
+      income {
+        id
+        label
+        sub
+        amount
+        position
+      }
     }
   }
 `)
 
-export const CreateBudgetDocument = graphql(`
-  mutation CreateBudget($name: String!, $amount: Float!, $ownerId: String!) {
-    createBudget(name: $name, amount: $amount, ownerId: $ownerId) {
-      id
-    }
+export const AddBudgetNodeDocument = graphql(`
+  mutation AddBudgetNode($ownerId: String!, $parentId: String, $label: String!, $icon: String!) {
+    addBudgetNode(ownerId: $ownerId, parentId: $parentId, label: $label, icon: $icon)
   }
 `)
 
-export const UpdateBudgetDocument = graphql(`
-  mutation UpdateBudget($id: String!, $amount: Float) {
-    updateBudget(id: $id, amount: $amount) {
-      id
-      amount
-    }
+export const RenameBudgetNodeDocument = graphql(`
+  mutation RenameBudgetNode($id: String!, $label: String!) {
+    renameBudgetNode(id: $id, label: $label)
   }
 `)
 
-export const DeleteBudgetDocument = graphql(`
-  mutation DeleteBudget($id: String!) {
-    deleteBudget(id: $id)
+export const DeleteBudgetNodeDocument = graphql(`
+  mutation DeleteBudgetNode($id: String!) {
+    deleteBudgetNode(id: $id)
+  }
+`)
+
+export const SetNodeBudgetDocument = graphql(`
+  mutation SetNodeBudget($id: String!, $year: Int!, $month: Int!, $budget: Float!) {
+    setNodeBudget(id: $id, year: $year, month: $month, budget: $budget)
+  }
+`)
+
+export const SetNodeAnnualLimitDocument = graphql(`
+  mutation SetNodeAnnualLimit($id: String!, $annualLimit: Float) {
+    setNodeAnnualLimit(id: $id, annualLimit: $annualLimit)
+  }
+`)
+
+export const AddIncomeSourceDocument = graphql(`
+  mutation AddIncomeSource($ownerId: String!, $label: String!, $amount: Float!) {
+    addIncomeSource(ownerId: $ownerId, label: $label, amount: $amount)
+  }
+`)
+
+export const RenameIncomeSourceDocument = graphql(`
+  mutation RenameIncomeSource($id: String!, $label: String!) {
+    renameIncomeSource(id: $id, label: $label)
+  }
+`)
+
+export const SetIncomeAmountDocument = graphql(`
+  mutation SetIncomeAmount($id: String!, $amount: Float!) {
+    setIncomeAmount(id: $id, amount: $amount)
+  }
+`)
+
+export const RemoveIncomeSourceDocument = graphql(`
+  mutation RemoveIncomeSource($id: String!) {
+    removeIncomeSource(id: $id)
+  }
+`)
+
+export const SetBudgetStartDocument = graphql(`
+  mutation SetBudgetStart($year: Int!, $month: Int!) {
+    setBudgetStart(year: $year, month: $month)
   }
 `)
