@@ -24,8 +24,10 @@ model Household {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  members User[]
-  invites HouseholdInvite[]
+  members      User[]
+  invites      HouseholdInvite[]
+  budgets      Budget[]
+  transactions Transaction[]
 }
 
 model User {
@@ -43,6 +45,9 @@ model User {
 
   createdInvites  HouseholdInvite[] @relation("CreatedBy")
   acceptedInvites HouseholdInvite[] @relation("AcceptedBy")
+
+  budgets          Budget[]
+  paidTransactions Transaction[]
 
   @@index([householdId])
 }
@@ -72,4 +77,76 @@ model HouseholdInvite {
 
   @@index([householdId])
   @@index([createdByUserId])
+}
+
+/// A per-person monthly spending target.
+///
+/// Unlike the rest of the app, `ownerId` is required rather than nullable: there
+/// are no joint budgets in v1. A shared cost is handled by splitting the
+/// transaction into both people's budgets instead. `householdId` is still the
+/// query scope, and either member can read and edit the other's budgets.
+model Budget {
+  id        String   @id @default(cuid())
+  name      String
+  /// Applies to every month. There are no per-month overrides in v1.
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  splits TransactionSplit[]
+
+  @@unique([ownerId, name])
+  @@index([householdId])
+}
+
+/// A single real-world charge. Spend is never stored on a Budget — it is derived
+/// by summing the splits below, which makes this table the only source of truth
+/// and rules out the two writers disagreeing.
+model Transaction {
+  id        String   @id @default(cuid())
+  merchant  String
+  /// Date-only. Always read and write through `monthRange` in src/lib/budget.ts:
+  /// local date getters slip a month at the boundary.
+  date      DateTime @db.Date
+  amount    Decimal  @db.Decimal(10, 2)
+  note      String?
+  createdAt DateTime @default(now())
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  /// Who paid. null = a joint account, so nobody is owed. Pure attribution — it
+  /// has no bearing on which budget the money lands in, that is the splits' job.
+  ownerId     String?
+  owner       User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  splits TransactionSplit[]
+
+  @@index([householdId, date])
+}
+
+/// One share of a transaction, filed against exactly one budget.
+///
+/// Invariant: a transaction has either zero splits (unfiled — it counts against
+/// no budget) or splits summing exactly to its amount. Enforced in
+/// `validateSplits`, and `setTransactionSplits` is the only way to write these.
+///
+/// No `householdId` of its own: a child row is always reached through its
+/// transaction, which carries the scope, and is cascade-deleted with it.
+model TransactionSplit {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  /// Restrict, not Cascade: cascading would delete some of a transaction's splits
+  /// and leave the survivors summing to less than its amount. `deleteBudget`
+  /// refuses while splits reference the budget instead.
+  budgetId      String
+  budget        Budget      @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+  amount        Decimal     @db.Decimal(10, 2)
+
+  @@index([transactionId])
+  @@index([budgetId])
 }

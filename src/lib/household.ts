@@ -59,17 +59,19 @@ export function decideAcceptInvite(facts: AcceptInviteFacts): AcceptInviteDecisi
 /**
  * Move every household-scoped record from one household to another.
  *
- * A no-op today: `User.householdId` is the only `householdId` in the schema and
- * the caller updates it. **Every future model carrying `householdId` must add a
- * `tx.<model>.updateMany` line here**, or a solo user's data is stranded on the
- * household deleted when they pair up.
+ * **Every model carrying `householdId` must add a `tx.<model>.updateMany` line
+ * here**, or a solo user's data is stranded on the household deleted when they
+ * pair up. Child rows need none — `TransactionSplit` travels with its
+ * transaction, and `ownerId` is untouched because the owner is moving too.
  */
 export async function migrateHouseholdRecords(
-  _tx: Prisma.TransactionClient,
-  _fromHouseholdId: string,
-  _toHouseholdId: string
+  tx: Prisma.TransactionClient,
+  fromHouseholdId: string,
+  toHouseholdId: string
 ): Promise<void> {
-  // await _tx.creditCard.updateMany({ where: { householdId: _fromHouseholdId }, data: { householdId: _toHouseholdId } })
+  const move = { where: { householdId: fromHouseholdId }, data: { householdId: toHouseholdId } }
+  await tx.budget.updateMany(move)
+  await tx.transaction.updateMany(move)
 }
 
 /** Consume an invite and clear out any other outstanding invites for the household. */
