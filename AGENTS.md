@@ -11,7 +11,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Git workflow
 
-No worktrees. Push straight to `main`.
+**Do NOT use git worktrees.** Work directly in this checkout. No `git worktree add`, no
+`EnterWorktree`. Push straight to `main`.
 
 ## What Homebase is
 
