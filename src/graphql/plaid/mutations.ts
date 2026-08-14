@@ -3,7 +3,7 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { prisma } from '@/lib/prisma'
 import { UserFacingError } from '@/lib/errors'
-import { plaidClient } from '@/lib/plaid'
+import { plaidClient, plaid } from '@/lib/plaid'
 import { parseDateOnly, monthRange } from '@/lib/budget'
 import { PlaidSyncResult } from './type'
 
@@ -13,23 +13,24 @@ async function assertMember(householdId: string, userId: string): Promise<void> 
   if (member === 0) throw new UserFacingError('That person is not in your household')
 }
 
-/** Base for the OAuth redirect Plaid Link needs for bank-hosted (Chase, etc.) logins. */
-function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-}
-
 builder.mutationFields((t) => ({
   createPlaidLinkToken: t.string({
     resolve: async (_root, _args, ctx) => {
       const { userId } = requireAuth(ctx)
-      const res = await plaidClient.linkTokenCreate({
-        user: { client_user_id: userId },
-        client_name: 'Homebase',
-        products: [Products.Transactions],
-        country_codes: [CountryCode.Us],
-        language: 'en',
-        redirect_uri: `${appUrl()}/transactions`,
-      })
+      // Only set for OAuth-required banks (Chase, Capital One, ...) — Plaid rejects
+      // any redirect_uri that isn't https and pre-registered in its Dashboard, so
+      // this is left unset in local dev.
+      const redirectUri = process.env.PLAID_REDIRECT_URI
+      const res = await plaid(() =>
+        plaidClient.linkTokenCreate({
+          user: { client_user_id: userId },
+          client_name: 'Homebase',
+          products: [Products.Transactions],
+          country_codes: [CountryCode.Us],
+          language: 'en',
+          ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+        })
+      )
       return res.data.link_token
     },
   }),
@@ -45,7 +46,7 @@ builder.mutationFields((t) => ({
       const { householdId } = requireAuth(ctx)
       if (ownerId) await assertMember(householdId, ownerId)
 
-      const exchange = await plaidClient.itemPublicTokenExchange({ public_token: publicToken })
+      const exchange = await plaid(() => plaidClient.itemPublicTokenExchange({ public_token: publicToken }))
 
       return prisma.plaidItem.create({
         ...query,
@@ -68,7 +69,7 @@ builder.mutationFields((t) => ({
       })
       if (!item) throw new UserFacingError('Bank connection not found')
       // Imported transactions stay — unlinking removes the connection, not its history.
-      await plaidClient.itemRemove({ access_token: item.accessToken })
+      await plaid(() => plaidClient.itemRemove({ access_token: item.accessToken }))
       await prisma.plaidItem.delete({ where: { id } })
       return true
     },
@@ -113,7 +114,7 @@ builder.mutationFields((t) => ({
 
         let hasMore = true
         while (hasMore) {
-          const res = await plaidClient.transactionsSync({ access_token: item.accessToken, cursor })
+          const res = await plaid(() => plaidClient.transactionsSync({ access_token: item.accessToken, cursor }))
           added.push(...res.data.added)
           modified.push(...res.data.modified)
           removedIds.push(...res.data.removed.map((r) => r.transaction_id))

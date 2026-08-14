@@ -1,4 +1,5 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid'
+import { UserFacingError } from '@/lib/errors'
 
 /**
  * The Plaid client singleton, mirroring src/lib/prisma.ts. `PLAID_ENV` defaults
@@ -18,3 +19,16 @@ export const plaidClient = new PlaidApi(
     },
   })
 )
+
+/** Plaid SDK failures are axios errors; the useful message is in response.data. */
+export async function plaid<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (e) {
+    const data = (e as { response?: { data?: { error_code?: string; error_message?: string } } })
+      .response?.data
+    if (!data?.error_message) throw e
+    console.error('Plaid error', data)
+    throw new UserFacingError(`Plaid: ${data.error_message}`)
+  }
+}
