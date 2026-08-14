@@ -6,8 +6,12 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
+import IconButton from '@mui/material/IconButton'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { MemberAvatar } from '@/components/MemberAvatar'
 import { MonthStepper, currentMonth, type MonthSel } from '@/components/MonthStepper'
 import { AppDialog, Row, Segmented, Stack } from '@/components/ui'
@@ -24,6 +28,7 @@ import {
   AddBudgetNodeDocument,
   AddIncomeSourceDocument,
   BudgetMonthDocument,
+  CopyBudgetFromDocument,
   DeleteBudgetNodeDocument,
   RemoveIncomeSourceDocument,
   RenameBudgetNodeDocument,
@@ -44,6 +49,8 @@ export default function BudgetPage() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [confirmStart, setConfirmStart] = useState(false)
+  const [confirmCopy, setConfirmCopy] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [{ data, fetching }, refetch] = useQuery({
@@ -62,6 +69,7 @@ export default function BudgetPage() {
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
   const [, removeIncome] = useMutation(RemoveIncomeSourceDocument)
   const [, setBudgetStart] = useMutation(SetBudgetStartDocument)
+  const [, copyBudgetFrom] = useMutation(CopyBudgetFromDocument)
 
   /**
    * Amounts committed locally but not yet echoed by the server.
@@ -136,6 +144,10 @@ export default function BudgetPage() {
     onToggle: (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] })),
   }
 
+  // The household caps at two, so "the other person" is whoever isn't on screen.
+  const viewed = members.find((m) => m.id === ownerId)
+  const other = members.find((m) => m.id !== ownerId)
+
   const personOptions = members.map((m) => ({
     value: m.id,
     label: memberLabel(m) + (m.id === me.id ? ' (you)' : ''),
@@ -171,6 +183,34 @@ export default function BudgetPage() {
           >
             {isCurrentStart ? 'Budget start' : 'Set as start'}
           </Button>
+          {other && (
+            <IconButton
+              size="small"
+              onClick={(e) => setMenuAnchor(e.currentTarget)}
+              title="More"
+              sx={{
+                width: 38,
+                height: 38,
+                color: 'text.secondary',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: '9px',
+              }}
+            >
+              <MoreHorizIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          )}
+          <Menu anchorEl={menuAnchor} open={menuAnchor != null} onClose={() => setMenuAnchor(null)}>
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null)
+                setConfirmCopy(true)
+              }}
+              sx={{ fontSize: 13.5 }}
+            >
+              Copy from {other ? memberLabel(other) : ''}
+            </MenuItem>
+          </Menu>
         </Row>
       </Row>
 
@@ -218,6 +258,42 @@ export default function BudgetPage() {
           if (id) run(() => deleteNode({ id }))
         }}
       />
+
+      {other && (
+        <AppDialog
+          open={confirmCopy}
+          onClose={() => setConfirmCopy(false)}
+          title={`Copy ${memberLabel(other)}'s budget`}
+          subtitle={monthLabel(sel.year, sel.month)}
+          width={400}
+        >
+          <Box sx={{ px: '22px', pb: '4px' }}>
+            <Typography variant="body" sx={{ color: 'grey.500', lineHeight: 1.5 }}>
+              Their categories and this month&apos;s amounts replace{' '}
+              {ownerId === me.id ? 'yours' : `${memberLabel(viewed ?? me)}'s`}. Categories that only exist
+              here are deleted, and any transactions filed under them become unfiled. This cannot be undone.
+            </Typography>
+          </Box>
+          <Row justify="end" gap="10px" sx={{ p: '16px 22px 20px' }}>
+            <Button variant="subtle" size="small" onClick={() => setConfirmCopy(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => {
+                setConfirmCopy(false)
+                // Every node id in the tree is about to change.
+                setCollapsed({})
+                run(() => copyBudgetFrom({ fromOwnerId: other.id, toOwnerId: ownerId, ...sel }))
+              }}
+              sx={{ bgcolor: 'error.main', '&:hover': { bgcolor: 'error.dark' } }}
+            >
+              Copy budget
+            </Button>
+          </Row>
+        </AppDialog>
+      )}
 
       <AppDialog
         open={confirmStart}

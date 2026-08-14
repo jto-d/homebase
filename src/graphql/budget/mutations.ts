@@ -48,6 +48,60 @@ async function subtreeIds(householdId: string, id: string): Promise<string[]> {
   return [id, ...children.map((c) => c.id), ...grandchildren.map((g) => g.id)]
 }
 
+/** One source row, with the month override already resolved into `budget`. */
+interface CopyNode {
+  id: string
+  parentId: string | null
+  label: string
+  icon: string
+  position: number
+  budget: number
+  annualLimit: number | null
+}
+
+/** Where the copy lands, and which month's figures it carries. */
+interface CopyTarget {
+  householdId: string
+  ownerId: string
+  year: number
+  month: number
+}
+
+/**
+ * Nested create data for a node and everything under it.
+ *
+ * Spelled out rather than borrowed from Prisma's generated input types: the
+ * recursion needs a return annotation, and this one says what the shape is
+ * without dragging three `…UncheckedCreateWithout…Input` names into the file.
+ */
+interface CopyData {
+  householdId: string
+  ownerId: string
+  label: string
+  icon: string
+  position: number
+  budget: number
+  annualLimit: number | null
+  months: { create: { year: number; month: number; budget: number } }
+  children: { create: CopyData[] }
+}
+
+function copyNode(node: CopyNode, byParent: Map<string | null, CopyNode[]>, into: CopyTarget): CopyData {
+  return {
+    householdId: into.householdId,
+    ownerId: into.ownerId,
+    label: node.label,
+    icon: node.icon,
+    position: node.position,
+    budget: node.budget,
+    annualLimit: node.annualLimit,
+    // Both the override and the rolling default, like setNodeBudget: this month
+    // is what was copied, and the months after it start from the same figure.
+    months: { create: { year: into.year, month: into.month, budget: node.budget } },
+    children: { create: (byParent.get(node.id) ?? []).map((child) => copyNode(child, byParent, into)) },
+  }
+}
+
 builder.mutationFields((t) => ({
   /**
    * Add a group (no parent), a category (parent is a group) or a line item
@@ -269,6 +323,87 @@ builder.mutationFields((t) => ({
       await prisma.household.update({
         where: { id: householdId },
         data: { budgetStartYear: year, budgetStartMonth: month },
+      })
+      return true
+    },
+  }),
+
+  /**
+   * Replace one person's budget with a copy of the other's, for one month.
+   *
+   * Wholesale, not a merge. Nodes have no cross-owner identity — no shared key,
+   * and labels are not unique — so pairing the two trees up would be guesswork.
+   * The target tree is dropped and rebuilt from the source, which also makes the
+   * result exactly the tree the person was looking at when they hit copy.
+   *
+   * Income is left alone: it has no month dimension, and "copy this month" has
+   * no meaning for a standing figure.
+   */
+  copyBudgetFrom: t.boolean({
+    args: {
+      fromOwnerId: t.arg.string({ required: true }),
+      toOwnerId: t.arg.string({ required: true }),
+      year: t.arg.int({ required: true }),
+      month: t.arg.int({ required: true, description: '1-based: 1 = January.' }),
+    },
+    resolve: async (_root, { fromOwnerId, toOwnerId, year, month }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (month < 1 || month > 12) throw new UserFacingError('That month does not exist')
+      if (fromOwnerId === toOwnerId) throw new UserFacingError('That is the same person')
+      await assertMember(householdId, fromOwnerId)
+      await assertMember(householdId, toOwnerId)
+
+      const source = await prisma.budgetNode.findMany({
+        where: { householdId, ownerId: fromOwnerId },
+        include: { months: { where: { year, month } } },
+        orderBy: { position: 'asc' },
+      })
+      if (source.length === 0) throw new UserFacingError('They have not set up a budget yet')
+
+      // Index by parent, resolving each amount the way the month view does: the
+      // override if this month has one, the rolling default otherwise.
+      const byParent = new Map<string | null, CopyNode[]>()
+      for (const node of source) {
+        const siblings = byParent.get(node.parentId) ?? []
+        siblings.push({
+          id: node.id,
+          parentId: node.parentId,
+          label: node.label,
+          icon: node.icon,
+          position: node.position,
+          budget: (node.months[0]?.budget ?? node.budget).toNumber(),
+          annualLimit: node.annualLimit?.toNumber() ?? null,
+        })
+        byParent.set(node.parentId, siblings)
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const old = await tx.budgetNode.findMany({
+          where: { householdId, ownerId: toOwnerId },
+          select: { id: true },
+        })
+
+        // Splits are Restrict, so they go first — and by transaction, not by
+        // node. A shared cost is one transaction split across both trees, and
+        // deleting only this side's share would leave the survivors summing to
+        // less than the transaction. Unfiling the whole thing is a valid state;
+        // half-filing is not.
+        const filed = await tx.transactionSplit.findMany({
+          where: { budgetId: { in: old.map((node) => node.id) } },
+          select: { transactionId: true },
+        })
+        await tx.transactionSplit.deleteMany({
+          where: { transactionId: { in: [...new Set(filed.map((split) => split.transactionId))] } },
+        })
+
+        // Children and month overrides cascade with their node.
+        await tx.budgetNode.deleteMany({ where: { householdId, ownerId: toOwnerId } })
+
+        for (const root of byParent.get(null) ?? []) {
+          await tx.budgetNode.create({
+            data: copyNode(root, byParent, { householdId, ownerId: toOwnerId, year, month }),
+          })
+        }
       })
       return true
     },
