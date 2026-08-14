@@ -1,8 +1,8 @@
 import { graphql } from '@/gql'
 
 /**
- * One document for the page: the transaction list plus the budget nodes it files
- * into, since every row needs to turn a budgetId into a name.
+ * One document for the page: the transaction list plus the budget leaves it
+ * files into, since every row turns a budgetId back into a path for display.
  *
  * `budgetLeaves` rather than one person's month — filing spans both members'
  * trees, and only a leaf can be filed into.
@@ -22,6 +22,7 @@ export const TransactionsMonthDocument = graphql(`
       amount
       note
       ownerId
+      shared
       splits {
         id
         budgetId
@@ -32,35 +33,22 @@ export const TransactionsMonthDocument = graphql(`
 `)
 
 export const CreateTransactionDocument = graphql(`
-  mutation CreateTransaction(
-    $merchant: String!
-    $date: String!
-    $amount: Float!
-    $ownerId: String
-    $budgetId: String
-  ) {
-    createTransaction(
-      merchant: $merchant
-      date: $date
-      amount: $amount
-      ownerId: $ownerId
-      budgetId: $budgetId
-    ) {
+  mutation CreateTransaction($merchant: String!, $date: String!, $amount: Float!, $ownerId: String) {
+    createTransaction(merchant: $merchant, date: $date, amount: $amount, ownerId: $ownerId) {
       id
     }
   }
 `)
 
-export const SetTransactionSplitsDocument = graphql(`
-  mutation SetTransactionSplits($transactionId: String!, $splits: [TransactionSplitInput!]!) {
-    setTransactionSplits(transactionId: $transactionId, splits: $splits) {
-      id
-      splits {
-        id
-        budgetId
-        amount
-      }
-    }
+export const SetTransactionCategoryDocument = graphql(`
+  mutation SetTransactionCategory($id: String!, $path: String) {
+    setTransactionCategory(id: $id, path: $path)
+  }
+`)
+
+export const SetTransactionSharedDocument = graphql(`
+  mutation SetTransactionShared($id: String!, $shared: Boolean) {
+    setTransactionShared(id: $id, shared: $shared)
   }
 `)
 

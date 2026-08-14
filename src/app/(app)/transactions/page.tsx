@@ -1,356 +1,217 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@urql/next'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Card from '@mui/material/Card'
-import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
-import Divider from '@mui/material/Divider'
-import IconButton from '@mui/material/IconButton'
-import MenuItem from '@mui/material/MenuItem'
-import Stack from '@mui/material/Stack'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
+import AddIcon from '@mui/icons-material/AddOutlined'
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined'
 import { MonthStepper, currentMonth } from '@/components/MonthStepper'
+import { Eyebrow, ProgressBar, Segmented, Stack, SurfaceCard } from '@/components/ui'
 import { memberLabel } from '@/lib/members'
-import { fmtDay, fmtMoney } from '@/lib/format'
+import { brand } from '@/lib/theme'
 import { useHousehold } from '../household-context'
 import {
   CreateTransactionDocument,
   DeleteTransactionDocument,
-  SetTransactionSplitsDocument,
+  SetTransactionCategoryDocument,
+  SetTransactionSharedDocument,
   TransactionsMonthDocument,
 } from './transactions.queries'
+import { AddTransactionDialog } from './add-transaction-dialog'
+import { TransactionRow, type CategoryGroup } from './transaction-row'
+import type { TransactionsMonthQuery } from '@/gql/graphql'
 
-const JOINT = '__joint__'
-const UNFILED = '__unfiled__'
+type Txn = TransactionsMonthQuery['transactions'][number]
+type Tab = 'all' | 'unfiled' | 'filed'
 
-type SplitDraft = { budgetId: string; amount: string }
+type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
 
-/** Cents, so the remainder readout can't sit at $0.00 while refusing to save. */
-function cents(value: string): number {
-  const n = Number(value)
-  return Number.isFinite(n) ? Math.round(n * 100) : NaN
+/** Group de-duplicated budget paths by their first segment, for the category menu. */
+function groupPaths(paths: readonly string[]): CategoryGroup[] {
+  const byGroup = new Map<string, string[]>()
+  for (const path of paths) {
+    const group = path.split(' › ')[0]!
+    if (!byGroup.has(group)) byGroup.set(group, [])
+    byGroup.get(group)!.push(path)
+  }
+  return Array.from(byGroup, ([group, paths]) => ({ group, paths }))
 }
 
 export default function TransactionsPage() {
-  const { me, members } = useHousehold()
+  const { me, partner, members } = useHousehold()
   const [sel, setSel] = useState(currentMonth)
+  const [tab, setTab] = useState<Tab>('all')
   const [error, setError] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
 
-  const [{ data, fetching }, refetch] = useQuery({
-    query: TransactionsMonthDocument,
-    variables: sel,
-  })
+  const [{ data, fetching }, refetch] = useQuery({ query: TransactionsMonthDocument, variables: sel })
   const [, createTransaction] = useMutation(CreateTransactionDocument)
-  const [, setSplits] = useMutation(SetTransactionSplitsDocument)
+  const [, setCategory] = useMutation(SetTransactionCategoryDocument)
+  const [, setShared] = useMutation(SetTransactionSharedDocument)
   const [, deleteTransaction] = useMutation(DeleteTransactionDocument)
 
-  const [merchant, setMerchant] = useState('')
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [amount, setAmount] = useState('')
-  const [payer, setPayer] = useState<string>(me.id)
-  const [budgetId, setBudgetId] = useState<string>(UNFILED)
-
-  /** The transaction whose split editor is open, and its working copy. */
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState<SplitDraft[]>([])
-
-  // Leaves across both members: a shared cost is one transaction split between
-  // two people's budgets, and only a leaf can be filed into.
-  const budgets = data?.budgetLeaves ?? []
+  const leaves = data?.budgetLeaves ?? []
   const transactions = data?.transactions ?? []
-  const budgetName = (id: string) => budgets.find((b) => b.id === id)?.path ?? 'Unknown budget'
-  const reload = () => refetch({ requestPolicy: 'network-only' })
 
-  function report(result: { error?: { graphQLErrors: readonly { message: string }[]; message: string } }) {
-    if (!result.error) {
-      setError(null)
-      return true
-    }
-    setError(result.error.graphQLErrors[0]?.message ?? result.error.message)
-    return false
+  const pathById = useMemo(() => new Map(leaves.map((l) => [l.id, l.path])), [leaves])
+  const categoryGroups = useMemo(
+    () => groupPaths(Array.from(new Set(leaves.map((l) => l.path))).sort()),
+    [leaves]
+  )
+
+  function isFiled(txn: Txn): boolean {
+    return txn.splits.length > 0 && (partner == null || txn.shared != null)
   }
 
-  async function handleCreate() {
-    const value = Number(amount)
-    if (!merchant.trim() || !Number.isFinite(value)) {
-      setError('Enter a merchant and an amount')
-      return
-    }
-    const result = await createTransaction({
-      merchant,
-      date,
-      amount: value,
-      ownerId: payer === JOINT ? null : payer,
-      budgetId: budgetId === UNFILED ? null : budgetId,
-    })
-    if (report(result)) {
-      setMerchant('')
-      setAmount('')
-      reload()
-    }
+  const unfiled = transactions.filter((t) => !isFiled(t))
+  const filed = transactions.filter(isFiled)
+  const total = transactions.length
+  const filedPct = total === 0 ? 1 : filed.length / total
+
+  function reload() {
+    refetch({ requestPolicy: 'network-only' })
   }
 
-  function openEditor(txn: (typeof transactions)[number]) {
-    setEditing(txn.id)
-    setDraft(
-      txn.splits.length > 0
-        ? txn.splits.map((s) => ({ budgetId: s.budgetId, amount: String(s.amount) }))
-        : // Seed a first row with the whole amount, so the common "split this in
-          // two" move is one edit rather than two.
-          [{ budgetId: budgets[0]?.id ?? '', amount: String(txn.amount) }]
+  function report(result: MutationResult): boolean {
+    if (result.error) {
+      setError(result.error.graphQLErrors[0]?.message ?? result.error.message)
+      return false
+    }
+    setError(null)
+    return true
+  }
+
+  async function run(fire: () => Promise<MutationResult>) {
+    if (report(await fire())) reload()
+  }
+
+  function payerLabel(txn: Txn): string {
+    if (!txn.ownerId) return 'Joint'
+    return memberLabel(members.find((m) => m.id === txn.ownerId) ?? me)
+  }
+
+  function renderGroup(title: string, tone: string, items: Txn[]) {
+    if (items.length === 0) return null
+    return (
+      <Box key={title}>
+        <Stack direction="row" align="center" gap={1} sx={{ px: 2.5, pt: 2, pb: 0.5 }}>
+          <Eyebrow sx={{ color: tone }}>{title}</Eyebrow>
+          <Box
+            sx={{
+              display: 'inline-grid',
+              placeItems: 'center',
+              minWidth: 20,
+              height: 18,
+              px: '6px',
+              borderRadius: '999px',
+              bgcolor: 'grey.100',
+              color: 'text.secondary',
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            {items.length}
+          </Box>
+        </Stack>
+        {items.map((txn, i) => (
+          <TransactionRow
+            key={txn.id}
+            txn={txn}
+            payerLabel={payerLabel(txn)}
+            partner={partner}
+            currentPath={txn.splits[0] ? (pathById.get(txn.splits[0].budgetId) ?? null) : null}
+            categoryGroups={categoryGroups}
+            onSetCategory={(path) => run(() => setCategory({ id: txn.id, path }))}
+            onSetShared={(shared) => run(() => setShared({ id: txn.id, shared }))}
+            onDelete={() => run(() => deleteTransaction({ id: txn.id }))}
+            last={i === items.length - 1}
+          />
+        ))}
+      </Box>
     )
   }
 
-  /** Replace-all, matching the mutation. An empty list is how a transaction is unfiled. */
-  async function handleSaveSplits(txnId: string, splits: { budgetId: string; amount: number }[]) {
-    if (report(await setSplits({ transactionId: txnId, splits }))) {
-      setEditing(null)
-      reload()
-    }
-  }
-
-  function draftSplits() {
-    return draft
-      .filter((row) => row.budgetId)
-      .map((row) => ({ budgetId: row.budgetId, amount: Number(row.amount) }))
-  }
-
-  async function handleDelete(id: string) {
-    if (report(await deleteTransaction({ id }))) reload()
-  }
-
   return (
-    <Stack spacing={3} sx={{ maxWidth: 720, mx: 'auto' }}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Transactions
-      </Typography>
-
-      <MonthStepper value={sel} onChange={setSel} />
-
-      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-
-      <Card sx={{ p: 3 }}>
-        <Stack spacing={2}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-            Add a transaction
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Merchant"
-              size="small"
-              value={merchant}
-              onChange={(e) => setMerchant(e.target.value)}
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              label="Date"
-              type="date"
-              size="small"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label="Amount"
-              size="small"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-              sx={{ width: 110 }}
-            />
-          </Stack>
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Paid by"
-              size="small"
-              select
-              value={payer}
-              onChange={(e) => setPayer(e.target.value)}
-              sx={{ flex: 1 }}
-            >
-              {members.map((m) => (
-                <MenuItem key={m.id} value={m.id}>
-                  {memberLabel(m)}
-                </MenuItem>
-              ))}
-              <MenuItem value={JOINT}>Joint account</MenuItem>
-            </TextField>
-            <TextField
-              label="Budget"
-              size="small"
-              select
-              value={budgetId}
-              onChange={(e) => setBudgetId(e.target.value)}
-              sx={{ flex: 1 }}
-              helperText="Leave unfiled to split it below"
-            >
-              <MenuItem value={UNFILED}>Unfiled</MenuItem>
-              {budgets.map((b) => (
-                <MenuItem key={b.id} value={b.id}>
-                  {b.path}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
-          <Button variant="contained" onClick={handleCreate} sx={{ alignSelf: 'flex-start' }}>
-            Add transaction
+    <Stack gap={3} sx={{ maxWidth: 1040, mx: 'auto' }}>
+      <Stack direction="row" align="center" justify="between">
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          Transactions
+        </Typography>
+        <Stack direction="row" gap={1.5} align="center">
+          <MonthStepper value={sel} onChange={setSel} />
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+            Add
           </Button>
         </Stack>
-      </Card>
+      </Stack>
+
+      {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
 
       {fetching && !data ? (
         <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
       ) : (
-        <Card sx={{ p: 3 }}>
-          <Stack spacing={2} divider={<Divider flexItem />}>
-            {transactions.length === 0 && (
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Nothing this month.
-              </Typography>
-            )}
-
-            {transactions.map((txn) => {
-              const isEditing = editing === txn.id
-              const remainder = isEditing
-                ? cents(String(txn.amount)) -
-                  draft.reduce((sum, row) => sum + (cents(row.amount) || 0), 0)
-                : 0
-
-              return (
-                <Stack key={txn.id} spacing={1}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    <Stack sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {txn.merchant}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {fmtDay(txn.date)}
-                        {' · '}
-                        {txn.ownerId
-                          ? memberLabel(members.find((m) => m.id === txn.ownerId) ?? me)
-                          : 'Joint'}
-                      </Typography>
-                    </Stack>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {fmtMoney(txn.amount)}
-                    </Typography>
-                    <Button size="small" onClick={() => (isEditing ? setEditing(null) : openEditor(txn))}>
-                      {isEditing ? 'Cancel' : txn.splits.length > 0 ? 'Edit split' : 'File'}
-                    </Button>
-                    <IconButton
-                      size="small"
-                      aria-label={`Delete ${txn.merchant}`}
-                      onClick={() => handleDelete(txn.id)}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                    {txn.splits.length === 0 ? (
-                      <Chip size="small" label="Unfiled" color="warning" variant="outlined" />
-                    ) : (
-                      txn.splits.map((s) => (
-                        <Chip
-                          key={s.id}
-                          size="small"
-                          variant="outlined"
-                          label={`${budgetName(s.budgetId)} ${fmtMoney(s.amount)}`}
-                        />
-                      ))
-                    )}
-                  </Stack>
-
-                  {isEditing && (
-                    <Stack spacing={1} sx={{ pl: 1, borderLeft: '2px solid', borderColor: 'divider' }}>
-                      {draft.map((row, i) => (
-                        <Stack key={i} direction="row" spacing={1}>
-                          <TextField
-                            size="small"
-                            select
-                            label="Budget"
-                            value={row.budgetId}
-                            onChange={(e) =>
-                              setDraft(draft.map((r, j) => (i === j ? { ...r, budgetId: e.target.value } : r)))
-                            }
-                            sx={{ flex: 1 }}
-                          >
-                            {budgets.map((b) => (
-                              <MenuItem key={b.id} value={b.id}>
-                                {b.path}
-                              </MenuItem>
-                            ))}
-                          </TextField>
-                          <TextField
-                            size="small"
-                            label="Amount"
-                            value={row.amount}
-                            onChange={(e) =>
-                              setDraft(draft.map((r, j) => (i === j ? { ...r, amount: e.target.value } : r)))
-                            }
-                            slotProps={{ htmlInput: { inputMode: 'decimal' } }}
-                            sx={{ width: 110 }}
-                          />
-                          <IconButton
-                            size="small"
-                            aria-label="Remove split"
-                            onClick={() => setDraft(draft.filter((_, j) => i !== j))}
-                          >
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </Stack>
-                      ))}
-
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            setDraft([
-                              ...draft,
-                              // Prefill the gap: the second half of a 50/50 is
-                              // usually exactly what's left.
-                              { budgetId: '', amount: remainder > 0 ? String(remainder / 100) : '' },
-                            ])
-                          }
-                        >
-                          Add split
-                        </Button>
-                        <Typography
-                          variant="caption"
-                          sx={{ flex: 1, color: remainder === 0 ? 'text.secondary' : 'error.main' }}
-                        >
-                          {remainder === 0
-                            ? 'Adds up'
-                            : `${fmtMoney(Math.abs(remainder) / 100)} ${remainder > 0 ? 'left to file' : 'over'}`}
-                        </Typography>
-                        <Button size="small" onClick={() => handleSaveSplits(txn.id, [])}>
-                          Unfile
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          disabled={remainder !== 0 || draft.some((r) => !r.budgetId)}
-                          onClick={() => handleSaveSplits(txn.id, draftSplits())}
-                        >
-                          Save
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  )}
-                </Stack>
-              )
-            })}
+        <SurfaceCard>
+          <Stack direction="row" align="center" justify="between" gap={2.5} sx={{ px: 2.5, py: 1.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50' }}>
+            <Stack sx={{ minWidth: 220 }} gap={0.5}>
+              <Stack direction="row" justify="between">
+                <Eyebrow>Filed</Eyebrow>
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                  {filed.length} of {total}
+                </Typography>
+              </Stack>
+              <ProgressBar value={filedPct} color={brand.teal[600]} thin />
+            </Stack>
+            <Segmented
+              value={tab}
+              onChange={(v) => setTab(v as Tab)}
+              options={[
+                { value: 'all', label: `All ${total}` },
+                { value: 'unfiled', label: `Unfiled ${unfiled.length}` },
+                { value: 'filed', label: `Filed ${filed.length}` },
+              ]}
+            />
           </Stack>
-        </Card>
+
+          {tab !== 'filed' && renderGroup('Needs assignment', brand.amber[700], unfiled)}
+          {tab !== 'unfiled' && renderGroup('Filed', 'text.secondary', filed)}
+
+          {total > 0 && unfiled.length === 0 && tab !== 'filed' && (
+            <Stack align="center" gap={1} sx={{ py: 6, px: 3, textAlign: 'center' }}>
+              <Box sx={{ width: 44, height: 44, borderRadius: '999px', bgcolor: brand.accentSoft, display: 'grid', placeItems: 'center' }}>
+                <CheckCircleOutlineIcon sx={{ color: brand.teal[700] }} />
+              </Box>
+              <Typography sx={{ fontWeight: 600 }}>Everything&rsquo;s filed</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                All {total} transactions are assigned to a budget{partner ? ', a split, or both' : ''}.
+              </Typography>
+            </Stack>
+          )}
+
+          {total === 0 && (
+            <Typography variant="body2" sx={{ color: 'text.secondary', p: 3 }}>
+              Nothing this month.
+            </Typography>
+          )}
+        </SurfaceCard>
       )}
+
+      <AddTransactionDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        members={members}
+        meId={me.id}
+        onSubmit={async ({ merchant, date, amount, ownerId }) => {
+          const ok = report(await createTransaction({ merchant, date, amount, ownerId }))
+          if (ok) reload()
+          return ok
+        }}
+      />
     </Stack>
   )
 }

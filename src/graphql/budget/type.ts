@@ -9,6 +9,9 @@ builder.prismaObject('Transaction', {
     note: t.exposeString('note', { nullable: true }),
     /// Who paid. null = a joint account.
     ownerId: t.exposeString('ownerId', { nullable: true }),
+    /// The split decision: null = not decided, false = all on the payer,
+    /// true = halved with the other member. See setTransactionShared.
+    shared: t.exposeBoolean('shared', { nullable: true }),
     /// Empty means unfiled: the transaction counts against no budget.
     splits: t.relation('splits'),
   }),

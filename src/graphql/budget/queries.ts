@@ -2,7 +2,7 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { BudgetLeafPayload, BudgetMonthPayload } from './type'
 import { prisma } from '@/lib/prisma'
-import { monthRange, yearToMonthRange } from '@/lib/budget'
+import { monthRange, yearToMonthRange, budgetLeaves } from '@/lib/budget'
 import { DEFAULT_GROUPS, DEFAULT_INCOME } from '@/lib/budgetDefaults'
 import { UserFacingError } from '@/lib/errors'
 
@@ -159,25 +159,7 @@ builder.queryFields((t) => ({
         select: { id: true, label: true, parentId: true, ownerId: true },
         orderBy: { position: 'asc' },
       })
-
-      const byId = new Map(nodes.map((n) => [n.id, n]))
-      const hasChildren = new Set(nodes.map((n) => n.parentId).filter((id) => id != null))
-
-      const path = (id: string): string => {
-        const parts: string[] = []
-        // Two levels of ancestry at most, but bounded by the map either way so a
-        // cycle from a bad write can't spin here.
-        for (let node = byId.get(id), hops = 0; node && hops < 8; hops++) {
-          parts.unshift(node.label)
-          node = node.parentId != null ? byId.get(node.parentId) : undefined
-        }
-        return parts.join(' › ')
-      }
-
-      return nodes
-        .filter((node) => !hasChildren.has(node.id))
-        .map((node) => ({ id: node.id, label: node.label, path: path(node.id), ownerId: node.ownerId }))
-        .sort((a, b) => a.path.localeCompare(b.path))
+      return budgetLeaves(nodes)
     },
   }),
 

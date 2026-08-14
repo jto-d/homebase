@@ -149,6 +149,44 @@ export function budgetTotals(
   }
 }
 
+export interface BudgetLeaf {
+  id: string
+  label: string
+  /** Ancestors included: `"Food › Groceries"`. Two people can both have a "Gas". */
+  path: string
+  ownerId: string
+}
+
+/**
+ * Every leaf across a household's budget trees, with its full path.
+ *
+ * The single implementation of `id -> "Group › Category"`, shared by the
+ * `budgetLeaves` query (build once, list) and the transaction-filing
+ * mutations (build once, look a path back up by owner).
+ */
+export function budgetLeaves(
+  nodes: readonly { id: string; label: string; parentId: string | null; ownerId: string }[]
+): BudgetLeaf[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const hasChildren = new Set(nodes.map((n) => n.parentId).filter((id) => id != null))
+
+  const path = (id: string): string => {
+    const parts: string[] = []
+    // Two levels of ancestry at most, but bounded by the map either way so a
+    // cycle from a bad write can't spin here.
+    for (let node = byId.get(id), hops = 0; node && hops < 8; hops++) {
+      parts.unshift(node.label)
+      node = node.parentId != null ? byId.get(node.parentId) : undefined
+    }
+    return parts.join(' › ')
+  }
+
+  return nodes
+    .filter((node) => !hasChildren.has(node.id))
+    .map((node) => ({ id: node.id, label: node.label, path: path(node.id), ownerId: node.ownerId }))
+    .sort((a, b) => a.path.localeCompare(b.path))
+}
+
 export interface SplitInput {
   budgetId: string
   amount: number

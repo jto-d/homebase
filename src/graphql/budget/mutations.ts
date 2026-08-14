@@ -2,7 +2,15 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { prisma } from '@/lib/prisma'
 import { UserFacingError } from '@/lib/errors'
-import { parseDateOnly, replaceSplits, validateSplits, type SplitInput } from '@/lib/budget'
+import {
+  parseDateOnly,
+  replaceSplits,
+  validateSplits,
+  budgetLeaves,
+  toCents,
+  type SplitInput,
+  type BudgetLeaf,
+} from '@/lib/budget'
 
 const TransactionSplitInput = builder.inputType('TransactionSplitInput', {
   fields: (t) => ({
@@ -33,6 +41,70 @@ async function assertBudgets(householdId: string, budgetIds: readonly string[]):
   if (found !== new Set(budgetIds).size) {
     throw new UserFacingError('Budget not found, or it has line items to file into instead')
   }
+}
+
+/**
+ * Recompute a transaction's splits from a category path + share decision, and
+ * write both in one go. The single writer behind `setTransactionCategory` and
+ * `setTransactionShared` — whichever one is called, the resulting splits only
+ * ever depend on these three inputs, never on what the splits used to be.
+ *
+ * `path == null` clears the transaction back to fully unfiled: no splits, no
+ * share decision (there is nothing left to have decided).
+ *
+ * `shared === true` needs a same-path leaf on both people's trees; `shared` is
+ * `false` or `null` otherwise, which look identical on disk (one leaf, the
+ * payer's, for the whole amount) and differ only in whether the decision has
+ * been made — that's what keeps a row in "Needs assignment" vs "Filed".
+ *
+ * ponytail: a joint transaction (`ownerId` null) files to whoever clicked, via
+ * `payerId`. Upgrade: prompt for a payer before allowing a joint txn to be filed.
+ */
+async function refileTransaction(
+  householdId: string,
+  payerId: string,
+  txnId: string,
+  amount: number,
+  path: string | null,
+  shared: boolean | null
+): Promise<void> {
+  if (path == null) {
+    await prisma.$transaction((tx) => replaceSplits(tx, txnId, []))
+    await prisma.transaction.update({ where: { id: txnId }, data: { shared: null } })
+    return
+  }
+
+  const nodes = await prisma.budgetNode.findMany({
+    where: { householdId },
+    select: { id: true, label: true, parentId: true, ownerId: true },
+  })
+  const leaves: BudgetLeaf[] = budgetLeaves(nodes)
+  const payerLeaf = leaves.find((l) => l.ownerId === payerId && l.path === path)
+  if (!payerLeaf) throw new UserFacingError(`No "${path}" budget to file into`)
+
+  let splits: SplitInput[]
+  if (shared === true) {
+    const partnerLeaf = leaves.find((l) => l.ownerId !== payerId && l.path === path)
+    if (!partnerLeaf) throw new UserFacingError(`Your partner has no "${path}" budget to split into`)
+    // Whole cents only, so the two shares sum back to the exact total —
+    // the odd cent on an uneven split lands on the payer.
+    const totalCents = toCents(amount)
+    const payerCents = totalCents - Math.floor(totalCents / 2)
+    splits = [
+      { budgetId: payerLeaf.id, amount: payerCents / 100 },
+      { budgetId: partnerLeaf.id, amount: (totalCents - payerCents) / 100 },
+    ]
+  } else {
+    splits = [{ budgetId: payerLeaf.id, amount }]
+  }
+
+  const decision = validateSplits(amount, splits)
+  if (!decision.ok) throw new UserFacingError(decision.error)
+
+  await prisma.$transaction(async (tx) => {
+    await replaceSplits(tx, txnId, splits)
+    await tx.transaction.update({ where: { id: txnId }, data: { shared } })
+  })
 }
 
 /** A node and its descendants — the rows a delete would actually take with it. */
@@ -522,6 +594,77 @@ builder.mutationFields((t) => ({
       await prisma.$transaction((tx) => replaceSplits(tx, txn.id, input))
 
       return prisma.transaction.findUniqueOrThrow({ ...query, where: { id: txn.id } })
+    },
+  }),
+
+  /**
+   * File a transaction under a budget category (by path, spanning both
+   * people's trees — same shape as `budgetLeaves`). `path: null` clears it back
+   * to unfiled. Preserves whatever share decision was already made, so
+   * changing the category on an already-split transaction re-splits at the
+   * new path instead of silently collapsing it to one person.
+   */
+  setTransactionCategory: t.boolean({
+    args: {
+      id: t.arg.string({ required: true }),
+      path: t.arg.string({ description: 'A budgetLeaves path, e.g. "Food › Groceries". Omit to clear.' }),
+    },
+    resolve: async (_root, { id, path }, ctx) => {
+      const { householdId, userId } = requireAuth(ctx)
+      const txn = await prisma.transaction.findFirst({
+        where: { id, householdId },
+        select: { amount: true, ownerId: true, shared: true },
+      })
+      if (!txn) throw new UserFacingError('Transaction not found')
+
+      await refileTransaction(
+        householdId,
+        txn.ownerId ?? userId,
+        id,
+        txn.amount.toNumber(),
+        path ?? null,
+        path != null ? txn.shared : null
+      )
+      return true
+    },
+  }),
+
+  /**
+   * Decide whether a filed transaction is split with the other household
+   * member. `shared: null` undoes the decision (back to "needs assignment")
+   * without touching the category. Requires a category first — there is no
+   * path to split without one.
+   */
+  setTransactionShared: t.boolean({
+    args: {
+      id: t.arg.string({ required: true }),
+      shared: t.arg.boolean({ description: 'true = split 50/50, false = all on the payer, omit = undecided.' }),
+    },
+    resolve: async (_root, { id, shared }, ctx) => {
+      const { householdId, userId } = requireAuth(ctx)
+      const txn = await prisma.transaction.findFirst({
+        where: { id, householdId },
+        select: { amount: true, ownerId: true, splits: { select: { budgetId: true }, take: 1 } },
+      })
+      if (!txn) throw new UserFacingError('Transaction not found')
+      if (txn.splits.length === 0) throw new UserFacingError('Pick a budget category first')
+
+      const nodes = await prisma.budgetNode.findMany({
+        where: { householdId },
+        select: { id: true, label: true, parentId: true, ownerId: true },
+      })
+      const currentLeaf = budgetLeaves(nodes).find((l) => l.id === txn.splits[0]!.budgetId)
+      if (!currentLeaf) throw new UserFacingError('Budget not found')
+
+      await refileTransaction(
+        householdId,
+        txn.ownerId ?? userId,
+        id,
+        txn.amount.toNumber(),
+        currentLeaf.path,
+        shared ?? null
+      )
+      return true
     },
   }),
 
