@@ -37,6 +37,7 @@ model Household {
   budgetNodes   BudgetNode[]
   incomeSources IncomeSource[]
   transactions  Transaction[]
+  plaidItems    PlaidItem[]
 }
 
 model User {
@@ -58,6 +59,30 @@ model User {
   budgetNodes      BudgetNode[]
   incomeSources    IncomeSource[]
   paidTransactions Transaction[]
+  plaidItems       PlaidItem[]
+
+  @@index([householdId])
+}
+
+/// One linked bank login (a Plaid Item). `accessToken` is the long-lived Plaid
+/// credential; `cursor` is the /transactions/sync position — null means "never
+/// synced", which is what makes the first sync a full backfill and every later
+/// one a delta.
+model PlaidItem {
+  id              String    @id @default(cuid())
+  /// Plaid's item_id.
+  itemId          String    @unique
+  accessToken     String
+  institutionName String
+  cursor          String?
+  createdAt       DateTime  @default(now())
+  lastSyncedAt    DateTime?
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  /// Who pays from this connection. null = joint account, matching Transaction.ownerId.
+  ownerId     String?
+  owner       User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@index([householdId])
 }
@@ -178,6 +203,9 @@ model Transaction {
   amount    Decimal  @db.Decimal(10, 2)
   note      String?
   createdAt DateTime @default(now())
+  /// Plaid's transaction_id. Set = came from a sync, and the dedup key for it.
+  /// Null for hand-entered rows.
+  plaidTransactionId String? @unique
   /// The split decision: null = not decided yet, false = all on the payer,
   /// true = halved with the other household member. A transaction is "filed"
   /// only once this is set AND splits exist — splits alone (the pre-inbox

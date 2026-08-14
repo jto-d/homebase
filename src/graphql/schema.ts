@@ -10,5 +10,8 @@ import './householdInvite/mutations'
 import './budget/type'
 import './budget/queries'
 import './budget/mutations'
+import './plaid/type'
+import './plaid/queries'
+import './plaid/mutations'
 
 export const schema = builder.toSchema()

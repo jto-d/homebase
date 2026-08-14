@@ -9,6 +9,10 @@ import { graphql } from '@/gql'
  */
 export const TransactionsMonthDocument = graphql(`
   query TransactionsMonth($year: Int!, $month: Int!) {
+    household {
+      budgetStartYear
+      budgetStartMonth
+    }
     budgetLeaves {
       id
       label
@@ -28,6 +32,12 @@ export const TransactionsMonthDocument = graphql(`
         budgetId
         amount
       }
+    }
+    plaidItems {
+      id
+      institutionName
+      ownerId
+      lastSyncedAt
     }
   }
 `)
@@ -55,5 +65,29 @@ export const SetTransactionSharedDocument = graphql(`
 export const DeleteTransactionDocument = graphql(`
   mutation DeleteTransaction($id: String!) {
     deleteTransaction(id: $id)
+  }
+`)
+
+export const CreatePlaidLinkTokenDocument = graphql(`
+  mutation CreatePlaidLinkToken {
+    createPlaidLinkToken
+  }
+`)
+
+export const LinkPlaidItemDocument = graphql(`
+  mutation LinkPlaidItem($publicToken: String!, $institutionName: String!, $ownerId: String) {
+    linkPlaidItem(publicToken: $publicToken, institutionName: $institutionName, ownerId: $ownerId) {
+      id
+    }
+  }
+`)
+
+export const SyncPlaidTransactionsDocument = graphql(`
+  mutation SyncPlaidTransactions {
+    syncPlaidTransactions {
+      imported
+      updated
+      removed
+    }
   }
 `)

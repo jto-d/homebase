@@ -8,6 +8,8 @@ import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/AddOutlined'
+import SyncIcon from '@mui/icons-material/SyncOutlined'
+import AccountBalanceIcon from '@mui/icons-material/AccountBalanceOutlined'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined'
 import { MonthStepper, currentMonth } from '@/components/MonthStepper'
 import { Eyebrow, ProgressBar, Segmented, Stack, SurfaceCard } from '@/components/ui'
@@ -15,13 +17,17 @@ import { memberLabel } from '@/lib/members'
 import { brand } from '@/lib/theme'
 import { useHousehold } from '../household-context'
 import {
+  CreatePlaidLinkTokenDocument,
   CreateTransactionDocument,
   DeleteTransactionDocument,
+  LinkPlaidItemDocument,
   SetTransactionCategoryDocument,
   SetTransactionSharedDocument,
+  SyncPlaidTransactionsDocument,
   TransactionsMonthDocument,
 } from './transactions.queries'
 import { AddTransactionDialog } from './add-transaction-dialog'
+import { LinkBankDialog } from './link-bank-dialog'
 import { TransactionRow, type CategoryGroup } from './transaction-row'
 import type { TransactionsMonthQuery } from '@/gql/graphql'
 
@@ -46,16 +52,27 @@ export default function TransactionsPage() {
   const [sel, setSel] = useState(currentMonth)
   const [tab, setTab] = useState<Tab>('all')
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   const [{ data, fetching }, refetch] = useQuery({ query: TransactionsMonthDocument, variables: sel })
   const [, createTransaction] = useMutation(CreateTransactionDocument)
   const [, setCategory] = useMutation(SetTransactionCategoryDocument)
   const [, setShared] = useMutation(SetTransactionSharedDocument)
   const [, deleteTransaction] = useMutation(DeleteTransactionDocument)
+  const [, createLinkToken] = useMutation(CreatePlaidLinkTokenDocument)
+  const [, linkPlaidItem] = useMutation(LinkPlaidItemDocument)
+  const [, syncPlaidTransactions] = useMutation(SyncPlaidTransactionsDocument)
 
   const leaves = data?.budgetLeaves ?? []
   const transactions = data?.transactions ?? []
+  const plaidItems = data?.plaidItems ?? []
+  const budgetStart =
+    data?.household.budgetStartYear != null && data?.household.budgetStartMonth != null
+      ? { year: data.household.budgetStartYear, month: data.household.budgetStartMonth }
+      : null
 
   const pathById = useMemo(() => new Map(leaves.map((l) => [l.id, l.path])), [leaves])
   const categoryGroups = useMemo(
@@ -83,6 +100,20 @@ export default function TransactionsPage() {
     }
     setError(null)
     return true
+  }
+
+  async function handleSync() {
+    setSyncing(true)
+    const result = await syncPlaidTransactions({})
+    setSyncing(false)
+    if (!report(result)) return
+    reload()
+    const { imported, updated, removed } = result.data!.syncPlaidTransactions
+    setInfo(
+      imported || updated || removed
+        ? `${imported} new, ${updated} updated, ${removed} removed`
+        : 'Already up to date'
+    )
   }
 
   async function run(fire: () => Promise<MutationResult>) {
@@ -142,7 +173,24 @@ export default function TransactionsPage() {
           Transactions
         </Typography>
         <Stack direction="row" gap={1.5} align="center">
-          <MonthStepper value={sel} onChange={setSel} />
+          <MonthStepper value={sel} onChange={setSel} min={budgetStart} />
+          <Button
+            variant="outlined"
+            startIcon={<AccountBalanceIcon />}
+            onClick={() => setLinkOpen(true)}
+          >
+            {plaidItems.length === 0 ? 'Link a bank' : 'Link another'}
+          </Button>
+          {plaidItems.length > 0 && (
+            <Button
+              variant="outlined"
+              startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
+              disabled={syncing}
+              onClick={handleSync}
+            >
+              Sync
+            </Button>
+          )}
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
             Add
           </Button>
@@ -150,6 +198,7 @@ export default function TransactionsPage() {
       </Stack>
 
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
+      {info && <Alert severity="success" onClose={() => setInfo(null)}>{info}</Alert>}
 
       {fetching && !data ? (
         <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}>
@@ -208,6 +257,22 @@ export default function TransactionsPage() {
         meId={me.id}
         onSubmit={async ({ merchant, date, amount, ownerId }) => {
           const ok = report(await createTransaction({ merchant, date, amount, ownerId }))
+          if (ok) reload()
+          return ok
+        }}
+      />
+
+      <LinkBankDialog
+        open={linkOpen}
+        onClose={() => setLinkOpen(false)}
+        members={members}
+        meId={me.id}
+        createLinkToken={async () => {
+          const result = await createLinkToken({})
+          return report(result) ? result.data!.createPlaidLinkToken : null
+        }}
+        onLinked={async ({ publicToken, institutionName, ownerId }) => {
+          const ok = report(await linkPlaidItem({ publicToken, institutionName, ownerId }))
           if (ok) reload()
           return ok
         }}
