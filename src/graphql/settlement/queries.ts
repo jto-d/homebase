@@ -69,11 +69,18 @@ builder.queryFields((t) => ({
             budget: { select: { ownerId: true } },
             transaction: { select: { id: true, merchant: true, date: true, ownerId: true } },
           },
-          orderBy: { transaction: { date: 'desc' } },
+          // Tiebreak on transactionId (unique — one cross-owed split per
+          // transaction reaches this query) so a same-day pair doesn't reorder
+          // itself the way an untied sort would. See budget/queries.ts:180.
+          orderBy: [
+            { transaction: { date: 'desc' } },
+            { transaction: { createdAt: 'desc' } },
+            { transactionId: 'desc' },
+          ],
         }),
         prisma.settlement.findMany({
           where: { householdId, date: monthRange({ year, month }) },
-          orderBy: { date: 'desc' },
+          orderBy: [{ date: 'desc' }, { id: 'desc' }],
         }),
       ])
 

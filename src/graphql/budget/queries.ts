@@ -177,7 +177,12 @@ builder.queryFields((t) => ({
           householdId: requireAuth(ctx).householdId,
           date: monthRange({ year, month }),
         },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        // `id` last so the order is total: a Plaid sync stamps every row in the
+        // batch with the same `createdAt` (Postgres evaluates now() once per
+        // transaction), and without a unique tiebreak Postgres falls back to heap
+        // order — which puts a row you just filed at the bottom of its date group,
+        // since an UPDATE rewrites the tuple at the end of the heap.
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       }),
   }),
 }))
