@@ -29,6 +29,7 @@ export interface CategoryGroup {
 interface TransactionRowProps {
   txn: Txn
   payerLabel: string
+  accountLabel: string | null
   partner: Member | null
   currentPath: string | null
   categoryGroups: CategoryGroup[]
@@ -53,6 +54,7 @@ const chipBase = {
 export function TransactionRow({
   txn,
   payerLabel,
+  accountLabel,
   partner,
   currentPath,
   categoryGroups,
@@ -72,6 +74,7 @@ export function TransactionRow({
         </Typography>
         <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
           {fmtDay(txn.date)} · {payerLabel}
+          {accountLabel && ` · ${accountLabel}`}
         </Typography>
       </Stack>
 

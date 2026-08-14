@@ -1,4 +1,5 @@
-import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid'
+import { Configuration, PlaidApi, PlaidEnvironments, type AccountBase } from 'plaid'
+import type { Prisma } from '@prisma/client'
 import { UserFacingError } from '@/lib/errors'
 
 /**
@@ -31,4 +32,39 @@ export async function plaid<T>(call: () => Promise<T>): Promise<T> {
     console.error('Plaid error', data)
     throw new UserFacingError(`Plaid: ${data.error_message}`)
   }
+}
+
+/**
+ * Upsert a page of Plaid's account payload (dumb mirror, overwritten wholesale
+ * every call — see PlaidAccount's schema comment) and return a
+ * Plaid account_id -> PlaidAccount.id map for stamping onto transactions.
+ * Shared by the sync mutation and the one-off backfill script.
+ */
+export async function upsertPlaidAccounts(
+  tx: Prisma.TransactionClient,
+  itemId: string,
+  accounts: AccountBase[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  for (const acct of accounts) {
+    const row = await tx.plaidAccount.upsert({
+      where: { plaidAccountId: acct.account_id },
+      create: {
+        plaidAccountId: acct.account_id,
+        name: acct.name,
+        mask: acct.mask,
+        type: acct.type,
+        subtype: acct.subtype,
+        itemId,
+      },
+      update: {
+        name: acct.name,
+        mask: acct.mask,
+        type: acct.type,
+        subtype: acct.subtype,
+      },
+    })
+    map.set(acct.account_id, row.id)
+  }
+  return map
 }

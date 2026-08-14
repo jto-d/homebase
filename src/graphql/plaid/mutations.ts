@@ -1,9 +1,9 @@
-import { CountryCode, Products, type Transaction as PlaidTransaction } from 'plaid'
+import { CountryCode, Products, type Transaction as PlaidTransaction, type AccountBase } from 'plaid'
 import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { prisma } from '@/lib/prisma'
 import { UserFacingError } from '@/lib/errors'
-import { plaidClient, plaid } from '@/lib/plaid'
+import { plaidClient, plaid, upsertPlaidAccounts } from '@/lib/plaid'
 import { parseDateOnly, monthRange } from '@/lib/budget'
 import { PlaidSyncResult } from './type'
 
@@ -111,6 +111,8 @@ builder.mutationFields((t) => ({
         const added: PlaidTransaction[] = []
         const modified: PlaidTransaction[] = []
         const removedIds: string[] = []
+        // Keyed by account_id — every page of a sync repeats the same accounts.
+        const accounts = new Map<string, AccountBase>()
 
         let hasMore = true
         while (hasMore) {
@@ -118,6 +120,7 @@ builder.mutationFields((t) => ({
           added.push(...res.data.added)
           modified.push(...res.data.modified)
           removedIds.push(...res.data.removed.map((r) => r.transaction_id))
+          for (const acct of res.data.accounts) accounts.set(acct.account_id, acct)
           cursor = res.data.next_cursor
           hasMore = res.data.has_more
         }
@@ -132,6 +135,8 @@ builder.mutationFields((t) => ({
         const toUpdate = modified.filter(inScope)
 
         await prisma.$transaction(async (tx) => {
+          const accountMap = await upsertPlaidAccounts(tx, item.id, [...accounts.values()])
+
           if (toAdd.length > 0) {
             const created = await tx.transaction.createMany({
               data: toAdd.map((txn) => ({
@@ -141,6 +146,7 @@ builder.mutationFields((t) => ({
                 amount: txn.amount,
                 ownerId: item.ownerId,
                 plaidTransactionId: txn.transaction_id,
+                accountId: accountMap.get(txn.account_id) ?? null,
               })),
               skipDuplicates: true,
             })
@@ -164,6 +170,7 @@ builder.mutationFields((t) => ({
                 merchant: txn.merchant_name ?? txn.name,
                 date: parseDateOnly(txn.date),
                 amount: txn.amount,
+                accountId: accountMap.get(txn.account_id) ?? existing.accountId,
                 ...(amountChanged ? { shared: null } : {}),
               },
             })

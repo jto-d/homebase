@@ -14,6 +14,8 @@ builder.prismaObject('Transaction', {
     shared: t.exposeBoolean('shared', { nullable: true }),
     /// Empty means unfiled: the transaction counts against no budget.
     splits: t.relation('splits'),
+    /// Which card/account it was charged to. Null for hand-entered rows.
+    account: t.relation('account', { nullable: true }),
   }),
 })
 

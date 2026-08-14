@@ -13,6 +13,16 @@ builder.prismaObject('PlaidItem', {
   }),
 })
 
+builder.prismaObject('PlaidAccount', {
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    name: t.exposeString('name'),
+    mask: t.exposeString('mask', { nullable: true }),
+    type: t.exposeString('type'),
+    subtype: t.exposeString('subtype', { nullable: true }),
+  }),
+})
+
 export const PlaidSyncResult = builder.simpleObject('PlaidSyncResult', {
   fields: (t) => ({
     imported: t.int(),

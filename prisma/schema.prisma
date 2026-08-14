@@ -87,7 +87,38 @@ model PlaidItem {
   ownerId     String?
   owner       User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
 
+  accounts PlaidAccount[]
+
   @@index([householdId])
+}
+
+/// A mirror of one account inside a PlaidItem, refreshed from every sync's
+/// `accounts` payload. Deliberately dumb: nothing user-authored lives here, so it
+/// can be overwritten wholesale. The Cards feature gets its own model pointing at
+/// this one, so unlinked cards still work.
+///
+/// No `householdId` — unlike every other model, this one scopes through `item`.
+/// It is derived from the item, so a column here could only ever drift from it,
+/// and `migrateHouseholdRecords()` needs no line for it: moving the item moves
+/// its accounts.
+model PlaidAccount {
+  id             String  @id @default(cuid())
+  /// Plaid's account_id. The dedup key for the sync upsert.
+  plaidAccountId String  @unique
+  name           String
+  /// Last 4. Nullable — Plaid omits it for some institutions.
+  mask           String?
+  /// "credit" | "depository" | ... and its subtype ("credit card", "checking").
+  /// The only signal for which accounts are actually cards.
+  type           String
+  subtype        String?
+
+  itemId String
+  item   PlaidItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  transactions Transaction[]
+
+  @@index([itemId])
 }
 
 enum InviteStatus {
@@ -221,6 +252,11 @@ model Transaction {
   /// has no bearing on which budget the money lands in, that is the splits' job.
   ownerId     String?
   owner       User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// Which account it was charged to. Null for hand-entered rows. SetNull, not
+  /// Cascade — unlinking a bank must not delete spend history.
+  accountId String?
+  account   PlaidAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
 
   splits TransactionSplit[]
 

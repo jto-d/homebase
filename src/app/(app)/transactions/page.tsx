@@ -125,6 +125,11 @@ export default function TransactionsPage() {
     return memberLabel(members.find((m) => m.id === txn.ownerId) ?? me)
   }
 
+  function accountLabel(txn: Txn): string | null {
+    if (!txn.account) return null
+    return txn.account.mask ? `${txn.account.name} •${txn.account.mask}` : txn.account.name
+  }
+
   function renderGroup(title: string, tone: string, items: Txn[]) {
     if (items.length === 0) return null
     return (
@@ -153,6 +158,7 @@ export default function TransactionsPage() {
             key={txn.id}
             txn={txn}
             payerLabel={payerLabel(txn)}
+            accountLabel={accountLabel(txn)}
             partner={partner}
             currentPath={txn.splits[0] ? (pathById.get(txn.splits[0].budgetId) ?? null) : null}
             categoryGroups={categoryGroups}

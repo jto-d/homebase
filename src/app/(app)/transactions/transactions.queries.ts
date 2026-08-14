@@ -27,6 +27,10 @@ export const TransactionsMonthDocument = graphql(`
       note
       ownerId
       shared
+      account {
+        name
+        mask
+      }
       splits {
         id
         budgetId
