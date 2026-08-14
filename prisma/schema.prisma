@@ -38,6 +38,7 @@ model Household {
   incomeSources IncomeSource[]
   transactions  Transaction[]
   plaidItems    PlaidItem[]
+  settlements   Settlement[]
 }
 
 model User {
@@ -60,6 +61,8 @@ model User {
   incomeSources    IncomeSource[]
   paidTransactions Transaction[]
   plaidItems       PlaidItem[]
+  settlementsPaid     Settlement[] @relation("SettlementsPaid")
+  settlementsReceived Settlement[] @relation("SettlementsReceived")
 
   @@index([householdId])
 }
@@ -255,4 +258,31 @@ model TransactionSplit {
 
   @@index([transactionId])
   @@index([budgetId])
+}
+
+/// A real payback between the two members — the one fact the splits can't derive.
+///
+/// Deliberately not tied to any transaction: it settles the running balance, not a
+/// specific charge. `date` is `@db.Date` like Transaction, so read it through
+/// `monthRange`/`parseDateOnly` for the same reason (local getters slip a month).
+///
+/// No `ownerId`: `fromUserId`/`toUserId` already say whose money moved, and the
+/// attribution convention doesn't apply to a two-sided transfer.
+model Settlement {
+  id        String   @id @default(cuid())
+  /// Who paid the money back.
+  fromUserId String
+  from      User     @relation("SettlementsPaid", fields: [fromUserId], references: [id], onDelete: Cascade)
+  /// Who received it.
+  toUserId  String
+  to        User     @relation("SettlementsReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+  amount    Decimal  @db.Decimal(10, 2)
+  date      DateTime @db.Date
+  note      String?
+  createdAt DateTime @default(now())
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, date])
 }

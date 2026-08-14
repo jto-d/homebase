@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Home' },
   { href: '/budget', label: 'Budget' },
   { href: '/transactions', label: 'Transactions' },
+  { href: '/split', label: 'Split' },
   { href: '/settings', label: 'Settings' },
 ]
 

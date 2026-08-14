@@ -13,5 +13,8 @@ import './budget/mutations'
 import './plaid/type'
 import './plaid/queries'
 import './plaid/mutations'
+import './settlement/type'
+import './settlement/queries'
+import './settlement/mutations'
 
 export const schema = builder.toSchema()
