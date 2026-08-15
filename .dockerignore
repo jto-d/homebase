@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.env*
+.claude
+.conductor
+.agents
+*.tsbuildinfo
