@@ -173,6 +173,11 @@ model BudgetNode {
   /// Set = this is a savings node, which draws a year-to-date bar against the
   /// limit. There is no SavingsAccount model: savings is a shape, not a table.
   annualLimit Decimal? @db.Decimal(10, 2)
+  /// Marks a savings subtree: set on a group, descendants inherit it (see
+  /// `savingsNodeIds`). A savings node's spend is a typed transfer, not derived
+  /// from transactions, and it drops out of `budgetLeaves` — nothing can be filed
+  /// into it.
+  isSavings   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   householdId String
@@ -191,17 +196,24 @@ model BudgetNode {
   @@index([parentId])
 }
 
-/// A per-month override of `BudgetNode.budget`. Absent means "use the rolling
-/// default", which is what keeps a budget you set once applying to every future
-/// month while last March stays exactly as it was.
+/// A per-month override of `BudgetNode.budget`, and/or a savings node's typed
+/// transfer for the month. Absent `budget` means "use the rolling default",
+/// which is what keeps a budget you set once applying to every future month
+/// while last March stays exactly as it was.
 model BudgetNodeMonth {
   id     String     @id @default(cuid())
   nodeId String
   node   BudgetNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   year   Int
   /// 1-based, like every other month in this app.
-  month  Int
-  budget Decimal    @db.Decimal(10, 2)
+  month       Int
+  /// Nullable so a contribution-only write doesn't freeze this month's budget at
+  /// whatever the rolling default happened to be.
+  budget      Decimal? @db.Decimal(10, 2)
+  /// A savings node's manually entered transfer for this month. Only meaningful
+  /// on a savings node, where it *replaces* derived spend rather than adding to
+  /// it — see `BudgetNode.isSavings`.
+  contributed Decimal? @db.Decimal(10, 2)
 
   @@unique([nodeId, year, month])
 }

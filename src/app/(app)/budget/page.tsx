@@ -37,6 +37,7 @@ import {
   SetIncomeAmountDocument,
   SetNodeAnnualLimitDocument,
   SetNodeBudgetDocument,
+  SetNodeContributedDocument,
 } from './budget.queries'
 
 type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
@@ -64,6 +65,7 @@ export default function BudgetPage() {
   const [, deleteNode] = useMutation(DeleteBudgetNodeDocument)
   const [, setNodeBudget] = useMutation(SetNodeBudgetDocument)
   const [, setAnnualLimit] = useMutation(SetNodeAnnualLimitDocument)
+  const [, setContributed] = useMutation(SetNodeContributedDocument)
   const [, addIncome] = useMutation(AddIncomeSourceDocument)
   const [, renameIncome] = useMutation(RenameIncomeSourceDocument)
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
@@ -102,6 +104,7 @@ export default function BudgetPage() {
         ...n,
         budget: overrides[n.id] ?? n.budget,
         annualLimit: overrides[`limit:${n.id}`] ?? n.annualLimit,
+        spent: overrides[`spent:${n.id}`] ?? n.spent,
       })),
     [month?.nodes, overrides]
   )
@@ -139,6 +142,8 @@ export default function BudgetPage() {
     onRename: (id, label) => run(() => renameNode({ id, label })),
     onDelete: (node) => setPendingDelete(node),
     onBudget: (id, budget) => run(() => setNodeBudget({ id, ...sel, budget }), { key: id, value: budget }),
+    onContributed: (id, spent) =>
+      run(() => setContributed({ id, ...sel, amount: spent }), { key: `spent:${id}`, value: spent }),
     onAnnualLimit: (id, annualLimit) =>
       run(() => setAnnualLimit({ id, annualLimit }), { key: `limit:${id}`, value: annualLimit }),
     onToggle: (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] })),

@@ -21,6 +21,7 @@ export interface LedgerHandlers {
   onRename: (id: string, label: string) => void
   onDelete: (node: PendingDelete) => void
   onBudget: (id: string, value: number) => void
+  onContributed: (id: string, value: number) => void
   onAnnualLimit: (id: string, value: number) => void
   onToggle: (id: string) => void
 }
@@ -28,9 +29,9 @@ export interface LedgerHandlers {
 /**
  * The ledger card: groups, their categories, and any line items beneath those.
  *
- * There is no savings section and no subscriptions section — savings is an
- * ordinary group whose rows happen to carry a limit, so it renders through the
- * same path as everything else.
+ * There is no separate savings section or subscriptions section — a savings
+ * subtree renders through the same path as everything else, its rows just
+ * carry a typed transfer instead of derived spend.
  */
 export function BudgetLedger({
   roots,
@@ -43,7 +44,7 @@ export function BudgetLedger({
   collapsed: Record<string, boolean>
   handlers: LedgerHandlers
 }) {
-  const { onAddChild, onAddGroup, onRename, onDelete, onBudget, onAnnualLimit, onToggle } = handlers
+  const { onAddChild, onAddGroup, onRename, onDelete, onBudget, onContributed, onAnnualLimit, onToggle } = handlers
 
   return (
     <SurfaceCard>
@@ -81,6 +82,9 @@ export function BudgetLedger({
                     annualLimit={category.annualLimit}
                     // A category with line items no longer owns its number.
                     onBudget={hasLines ? undefined : (v) => onBudget(category.id, v)}
+                    onSpent={
+                      category.isSavings && !hasLines ? (v) => onContributed(category.id, v) : undefined
+                    }
                     onAnnualLimit={(v) => onAnnualLimit(category.id, v)}
                     onRename={(label) => onRename(category.id, label)}
                     onRemove={() =>
@@ -105,6 +109,7 @@ export function BudgetLedger({
                           ytd={line.ytd}
                           annualLimit={line.annualLimit}
                           onBudget={(v) => onBudget(line.id, v)}
+                          onSpent={line.isSavings ? (v) => onContributed(line.id, v) : undefined}
                           onAnnualLimit={(v) => onAnnualLimit(line.id, v)}
                           onRename={(label) => onRename(line.id, label)}
                           onRemove={() => onDelete({ id: line.id, label: line.label, childCount: 0 })}

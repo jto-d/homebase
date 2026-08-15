@@ -22,6 +22,8 @@ interface LedgerRowProps {
   last?: boolean
   /** Omitted when the row has children — its budget is theirs, not its own. */
   onBudget?: (v: number) => void
+  /** Present only on a savings leaf — types the transfer instead of showing derived spend. */
+  onSpent?: (v: number) => void
   onAnnualLimit: (v: number) => void
   onRename: (v: string) => void
   onRemove: () => void
@@ -49,6 +51,7 @@ export function LedgerRow({
   annualLimit,
   last,
   onBudget,
+  onSpent,
   onAnnualLimit,
   onRename,
   onRemove,
@@ -100,9 +103,13 @@ export function LedgerRow({
         </Row>
 
         <Row justify="end" sx={{ width: COL_W }}>
-          <Typography sx={{ ...tabularNums, fontSize: 14, fontWeight: 500, color: 'text.disabled' }}>
-            {fmtDollars(spent)}
-          </Typography>
+          {onSpent ? (
+            <EditableMoney value={spent} onChange={onSpent} weight={500} />
+          ) : (
+            <Typography sx={{ ...tabularNums, fontSize: 14, fontWeight: 500, color: 'text.disabled' }}>
+              {fmtDollars(spent)}
+            </Typography>
+          )}
         </Row>
 
         <Row justify="end" sx={{ width: COL_W, pr: 1 }}>

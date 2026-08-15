@@ -46,12 +46,19 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     /// This month's override, or the rolling default. Ignore it on a node with
     /// children — that one is the sum of its children (see `buildBudgetTree`).
     budget: t.float(),
-    /// Set = a savings node, drawing a year-to-date bar against this limit.
+    /// Set = draws a year-to-date bar against this limit. Only meaningful on a
+    /// savings node.
     annualLimit: t.float({ nullable: true }),
-    /// This node's *own* splits for the month. Children are added on top by the
-    /// client, so a node filed against before it grew children keeps its history.
+    /// Inherited: true for a node flagged directly, or under one that is. A
+    /// savings node can't be filed into, and its spend/ytd below are typed
+    /// transfers rather than derived from transactions.
+    isSavings: t.boolean(),
+    /// This node's *own* figure for the month: splits, unless `isSavings`, in
+    /// which case it's the typed transfer. Children are added on top by the
+    /// client, so a node filed/contributed to before it grew children keeps its
+    /// history.
     spent: t.float(),
-    /// January through the selected month. Zero unless `annualLimit` is set.
+    /// January through the selected month. Zero unless `isSavings`.
     ytd: t.float(),
   }),
 })

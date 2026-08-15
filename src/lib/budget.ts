@@ -78,6 +78,8 @@ export interface BudgetNodeData {
   position: number
   budget: number
   annualLimit: number | null
+  /// Inherited: true for a node flagged directly, or under one that is.
+  isSavings: boolean
   spent: number
   ytd: number
 }
@@ -99,6 +101,8 @@ export interface BudgetTreeNode extends BudgetNodeData {
  * - **spent** — own splits *plus* children, never replaced. A node filed against
  *   before it grew children keeps that history instead of dropping it on the
  *   floor the moment someone adds a line item under it.
+ * - **ytd** — rolls up the same way as spent, so a savings group totals its
+ *   children's contributions. Zero on anything outside a savings subtree.
  */
 export function buildBudgetTree(nodes: readonly BudgetNodeData[]): BudgetTreeNode[] {
   const byId = new Map<string, BudgetTreeNode>(nodes.map((n) => [n.id, { ...n, children: [] }]))
@@ -117,6 +121,7 @@ export function buildBudgetTree(nodes: readonly BudgetNodeData[]): BudgetTreeNod
     node.children.forEach(rollUp)
     if (node.children.length > 0) node.budget = sumMoney(node.children, (c) => c.budget)
     node.spent = roundCents(node.spent + sumMoney(node.children, (c) => c.spent))
+    node.ytd = roundCents(node.ytd + sumMoney(node.children, (c) => c.ytd))
     return node
   }
 
@@ -158,17 +163,44 @@ export interface BudgetLeaf {
 }
 
 /**
+ * Node ids inside a savings subtree — `isSavings` set on a group, inherited by
+ * everything under it. The single implementation of that inheritance, read by
+ * `budgetLeaves` (to exclude them from filing) and `buildBudgetTree`'s caller
+ * (to decide which rows get a typed transfer instead of derived spend).
+ */
+export function savingsNodeIds(
+  nodes: readonly { id: string; parentId: string | null; isSavings: boolean }[]
+): Set<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const result = new Set<string>()
+  for (const start of nodes) {
+    // Two levels of ancestry at most, but bounded either way so a cycle from a
+    // bad write can't spin here.
+    for (let node = byId.get(start.id), hops = 0; node && hops < 8; hops++) {
+      if (node.isSavings) {
+        result.add(start.id)
+        break
+      }
+      node = node.parentId != null ? byId.get(node.parentId) : undefined
+    }
+  }
+  return result
+}
+
+/**
  * Every leaf across a household's budget trees, with its full path.
  *
  * The single implementation of `id -> "Group › Category"`, shared by the
  * `budgetLeaves` query (build once, list) and the transaction-filing
- * mutations (build once, look a path back up by owner).
+ * mutations (build once, look a path back up by owner). Savings nodes are
+ * excluded — a transfer is typed directly onto the row, not filed like a charge.
  */
 export function budgetLeaves(
-  nodes: readonly { id: string; label: string; parentId: string | null; ownerId: string }[]
+  nodes: readonly { id: string; label: string; parentId: string | null; ownerId: string; isSavings: boolean }[]
 ): BudgetLeaf[] {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const hasChildren = new Set(nodes.map((n) => n.parentId).filter((id) => id != null))
+  const savings = savingsNodeIds(nodes)
 
   const path = (id: string): string => {
     const parts: string[] = []
@@ -182,7 +214,7 @@ export function budgetLeaves(
   }
 
   return nodes
-    .filter((node) => !hasChildren.has(node.id))
+    .filter((node) => !hasChildren.has(node.id) && !savings.has(node.id))
     .map((node) => ({ id: node.id, label: node.label, path: path(node.id), ownerId: node.ownerId }))
     .sort((a, b) => a.path.localeCompare(b.path))
 }

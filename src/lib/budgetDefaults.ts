@@ -16,6 +16,8 @@ export interface DefaultCategory {
 export interface DefaultGroup {
   label: string
   icon: string
+  /** Descendants inherit this — see `BudgetNode.isSavings`. */
+  isSavings?: boolean
   categories: DefaultCategory[]
 }
 
@@ -64,7 +66,7 @@ export const DEFAULT_GROUPS: DefaultGroup[] = [
   {
     label: 'Savings',
     icon: 'savings',
-    // An ordinary group whose children carry a limit — that is all "savings" is.
+    isSavings: true,
     // The 2026 Roth IRA limit; editable inline once the row is on screen.
     categories: [{ label: 'Roth IRA', icon: 'savings', annualLimit: 7500 }],
   },

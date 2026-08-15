@@ -17,6 +17,7 @@ export const BudgetMonthDocument = graphql(`
         position
         budget
         annualLimit
+        isSavings
         spent
         ytd
       }
@@ -58,6 +59,12 @@ export const SetNodeBudgetDocument = graphql(`
 export const SetNodeAnnualLimitDocument = graphql(`
   mutation SetNodeAnnualLimit($id: String!, $annualLimit: Float) {
     setNodeAnnualLimit(id: $id, annualLimit: $annualLimit)
+  }
+`)
+
+export const SetNodeContributedDocument = graphql(`
+  mutation SetNodeContributed($id: String!, $year: Int!, $month: Int!, $amount: Float!) {
+    setNodeContributed(id: $id, year: $year, month: $month, amount: $amount)
   }
 `)
 

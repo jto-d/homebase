@@ -2,7 +2,7 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { BudgetLeafPayload, BudgetMonthPayload } from './type'
 import { prisma } from '@/lib/prisma'
-import { monthRange, yearToMonthRange, budgetLeaves } from '@/lib/budget'
+import { monthRange, budgetLeaves, savingsNodeIds } from '@/lib/budget'
 import { DEFAULT_GROUPS, DEFAULT_INCOME } from '@/lib/budgetDefaults'
 import { UserFacingError } from '@/lib/errors'
 
@@ -30,6 +30,7 @@ async function seedIfEmpty(householdId: string, ownerId: string): Promise<void> 
           label: group.label,
           icon: group.icon,
           position,
+          isSavings: group.isSavings ?? false,
           children: {
             create: group.categories.map((category, childPosition) => ({
               householdId,
@@ -56,8 +57,9 @@ builder.queryFields((t) => ({
    * One person's whole budget for one month.
    *
    * Five queries, none of them per-row: the nodes (with just this month's
-   * overrides joined in), the income sources, the household's budget start, and
-   * two grouped sums over splits — one for the month, one for the year to date.
+   * overrides joined in), the income sources, the household's budget start, a
+   * grouped sum over splits for the month, and a grouped sum over savings
+   * contributions for the year to date.
    *
    * The list comes back flat, with `parentId` on each node; `buildBudgetTree`
    * on the client shapes it and applies the roll-up rule. Nesting it into the
@@ -81,7 +83,7 @@ builder.queryFields((t) => ({
 
       await seedIfEmpty(householdId, ownerId)
 
-      const [nodes, income, household, monthSpend, ytdSpend] = await Promise.all([
+      const [nodes, income, household, monthSpend, ytdContributed] = await Promise.all([
         prisma.budgetNode.findMany({
           where: { householdId, ownerId },
           orderBy: { position: 'asc' },
@@ -103,34 +105,38 @@ builder.queryFields((t) => ({
             transaction: { date: monthRange({ year, month }) },
           },
         }),
-        // Only savings nodes carry a year-to-date figure, so the second aggregate
-        // is narrowed to them rather than summing the whole tree twice.
-        prisma.transactionSplit.groupBy({
-          by: ['budgetId'],
-          _sum: { amount: true },
-          where: {
-            budget: { householdId, ownerId, annualLimit: { not: null } },
-            transaction: { date: yearToMonthRange({ year, month }) },
-          },
+        // Cumulative through the selected month — that's the year-to-date figure.
+        prisma.budgetNodeMonth.groupBy({
+          by: ['nodeId'],
+          _sum: { contributed: true },
+          where: { node: { householdId, ownerId }, year, month: { lte: month } },
         }),
       ])
 
       const spentBy = new Map(monthSpend.map((row) => [row.budgetId, row._sum.amount]))
-      const ytdBy = new Map(ytdSpend.map((row) => [row.budgetId, row._sum.amount]))
+      const contributedYtdBy = new Map(ytdContributed.map((row) => [row.nodeId, row._sum.contributed]))
+      const savings = savingsNodeIds(nodes)
 
       return {
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          parentId: node.parentId,
-          label: node.label,
-          icon: node.icon,
-          position: node.position,
-          // The month override wins; absent, the rolling default applies.
-          budget: (node.months[0]?.budget ?? node.budget).toNumber(),
-          annualLimit: node.annualLimit?.toNumber() ?? null,
-          spent: spentBy.get(node.id)?.toNumber() ?? 0,
-          ytd: ytdBy.get(node.id)?.toNumber() ?? 0,
-        })),
+        nodes: nodes.map((node) => {
+          const isSavingsNode = savings.has(node.id)
+          return {
+            id: node.id,
+            parentId: node.parentId,
+            label: node.label,
+            icon: node.icon,
+            position: node.position,
+            // The month override wins; absent, the rolling default applies.
+            budget: (node.months[0]?.budget ?? node.budget).toNumber(),
+            annualLimit: node.annualLimit?.toNumber() ?? null,
+            isSavings: isSavingsNode,
+            // Savings: the typed transfer for this month. Everything else: splits.
+            spent: isSavingsNode
+              ? (node.months[0]?.contributed?.toNumber() ?? 0)
+              : (spentBy.get(node.id)?.toNumber() ?? 0),
+            ytd: isSavingsNode ? (contributedYtdBy.get(node.id)?.toNumber() ?? 0) : 0,
+          }
+        }),
         income: income.map((source) => ({
           id: source.id,
           label: source.label,
@@ -156,7 +162,7 @@ builder.queryFields((t) => ({
       const { householdId } = requireAuth(ctx)
       const nodes = await prisma.budgetNode.findMany({
         where: { householdId },
-        select: { id: true, label: true, parentId: true, ownerId: true },
+        select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
         orderBy: { position: 'asc' },
       })
       return budgetLeaves(nodes)
