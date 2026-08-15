@@ -67,7 +67,7 @@ builder.queryFields((t) => ({
           select: {
             amount: true,
             budget: { select: { ownerId: true } },
-            transaction: { select: { id: true, merchant: true, date: true, ownerId: true } },
+            transaction: { select: { id: true, merchant: true, date: true, ownerId: true, amount: true } },
           },
           // Tiebreak on transactionId (unique — one cross-owed split per
           // transaction reaches this query) so a same-day pair doesn't reorder
@@ -85,13 +85,14 @@ builder.queryFields((t) => ({
       ])
 
       // Net in integer cents throughout — never float subtraction on money.
-      // b owes a: (what b owes a) − (what a paid b, i.e. paidBy(a) reduces a's
-      // own debt to b) − ... spelled out below rather than folded into one
-      // expression, since each term settles a different leg.
+      // b owes a: (what b owes a) − (what a owes b) + (what a paid b, which
+      // raises what b now owes a) − (what b paid a, which pays that down) —
+      // spelled out below rather than folded into one expression, since each
+      // term settles a different leg.
       const netCents =
         toCents(bOwesA._sum.amount?.toNumber() ?? 0) -
-        toCents(aOwesB._sum.amount?.toNumber() ?? 0) -
-        toCents(aPaid._sum.amount?.toNumber() ?? 0) +
+        toCents(aOwesB._sum.amount?.toNumber() ?? 0) +
+        toCents(aPaid._sum.amount?.toNumber() ?? 0) -
         toCents(bPaid._sum.amount?.toNumber() ?? 0)
 
       const monthCents = monthSplits.reduce((sum, s) => {
@@ -110,7 +111,8 @@ builder.queryFields((t) => ({
           date: s.transaction.date.toISOString(),
           payerUserId: s.transaction.ownerId!,
           debtorUserId: s.budget.ownerId,
-          amount: s.amount.toNumber(),
+          // The full transaction total, not the cross-owed split share — that's what reads as "the bill".
+          amount: s.transaction.amount.toNumber(),
         })),
         settlements: monthSettlements,
       }

@@ -139,7 +139,7 @@ export default function SplitPage() {
                       {item.merchant}
                     </Typography>
                     <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
-                      {fmtDay(item.date)} · {labelFor(item.payerUserId)} fronted
+                      {fmtDay(item.date)} · Paid by {labelFor(item.payerUserId)}
                     </Typography>
                   </Stack>
                   <Typography variant="body2" sx={{ width: 96, textAlign: 'right', fontWeight: 600, ...tabularNums }}>
