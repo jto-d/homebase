@@ -10,7 +10,6 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
-import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { MemberAvatar } from '@/components/MemberAvatar'
 import { MonthStepper, currentMonth, type MonthSel } from '@/components/MonthStepper'
@@ -33,7 +32,6 @@ import {
   RemoveIncomeSourceDocument,
   RenameBudgetNodeDocument,
   RenameIncomeSourceDocument,
-  SetBudgetStartDocument,
   SetIncomeAmountDocument,
   SetNodeAnnualLimitDocument,
   SetNodeBudgetDocument,
@@ -49,7 +47,6 @@ export default function BudgetPage() {
   const [ownerId, setOwnerId] = useState(me.id)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
-  const [confirmStart, setConfirmStart] = useState(false)
   const [confirmCopy, setConfirmCopy] = useState(false)
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -70,7 +67,6 @@ export default function BudgetPage() {
   const [, renameIncome] = useMutation(RenameIncomeSourceDocument)
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
   const [, removeIncome] = useMutation(RemoveIncomeSourceDocument)
-  const [, setBudgetStart] = useMutation(SetBudgetStartDocument)
   const [, copyBudgetFrom] = useMutation(CopyBudgetFromDocument)
 
   /**
@@ -95,8 +91,6 @@ export default function BudgetPage() {
     month?.budgetStartYear != null && month.budgetStartMonth != null
       ? { year: month.budgetStartYear, month: month.budgetStartMonth }
       : null
-  const isCurrentStart =
-    budgetStart != null && budgetStart.year === sel.year && budgetStart.month === sel.month
 
   const nodes: BudgetNodeData[] = useMemo(
     () =>
@@ -168,26 +162,6 @@ export default function BudgetPage() {
         <Row gap={1.25} wrap>
           {members.length > 1 && <Segmented value={ownerId} onChange={setOwnerId} options={personOptions} />}
           <MonthStepper value={sel} onChange={setSel} min={budgetStart} />
-          <Button
-            size="small"
-            startIcon={<FlagOutlinedIcon sx={{ fontSize: 14 }} />}
-            onClick={() => setConfirmStart(true)}
-            disabled={isCurrentStart}
-            title={isCurrentStart ? 'This is your budget start month' : 'Mark this month as the budget start'}
-            sx={{
-              textTransform: 'none',
-              fontSize: 12,
-              fontWeight: 500,
-              height: 38,
-              color: isCurrentStart ? 'primary.main' : 'text.secondary',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: '9px',
-              px: 1.25,
-            }}
-          >
-            {isCurrentStart ? 'Budget start' : 'Set as start'}
-          </Button>
           {other && (
             <IconButton
               size="small"
@@ -299,37 +273,6 @@ export default function BudgetPage() {
           </Row>
         </AppDialog>
       )}
-
-      <AppDialog
-        open={confirmStart}
-        onClose={() => setConfirmStart(false)}
-        title="Set budget start"
-        subtitle={monthLabel(sel.year, sel.month)}
-        width={400}
-      >
-        <Box sx={{ px: '22px', pb: '4px' }}>
-          <Typography variant="body" sx={{ color: 'grey.500', lineHeight: 1.5 }}>
-            This marks the month your budget begins. Months before it are hidden from the stepper, for both of
-            you.
-          </Typography>
-        </Box>
-        <Row justify="end" gap="10px" sx={{ p: '16px 22px 20px' }}>
-          <Button variant="subtle" size="small" onClick={() => setConfirmStart(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<FlagOutlinedIcon sx={{ fontSize: 15 }} />}
-            onClick={() => {
-              setConfirmStart(false)
-              run(() => setBudgetStart(sel))
-            }}
-          >
-            Set start
-          </Button>
-        </Row>
-      </AppDialog>
     </Stack>
   )
 }

@@ -12,6 +12,8 @@ export const HouseholdDocument = graphql(`
     }
     household {
       id
+      budgetStartYear
+      budgetStartMonth
       members {
         id
         name
@@ -28,5 +30,11 @@ export const CreateHouseholdInviteDocument = graphql(`
       code
       url
     }
+  }
+`)
+
+export const SetBudgetStartDocument = graphql(`
+  mutation SetBudgetStart($year: Int!, $month: Int!) {
+    setBudgetStart(year: $year, month: $month)
   }
 `)

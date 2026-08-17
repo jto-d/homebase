@@ -10,16 +10,32 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { MemberAvatar } from '@/components/MemberAvatar'
+import { currentMonth, MonthStepper, type MonthSel } from '@/components/MonthStepper'
 import { memberLabel } from '@/lib/members'
 import { useHousehold } from '../household-context'
-import { CreateHouseholdInviteDocument } from '../household.queries'
+import { CreateHouseholdInviteDocument, SetBudgetStartDocument } from '../household.queries'
 
 export default function SettingsPage() {
-  const { me, partner } = useHousehold()
+  const { me, partner, budgetStart, refetch } = useHousehold()
   const [{ fetching }, createInvite] = useMutation(CreateHouseholdInviteDocument)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const [sel, setSel] = useState<MonthSel>(budgetStart ?? currentMonth())
+  const [{ fetching: savingStart }, setBudgetStart] = useMutation(SetBudgetStartDocument)
+  const [startError, setStartError] = useState<string | null>(null)
+  const startDirty = budgetStart == null || sel.year !== budgetStart.year || sel.month !== budgetStart.month
+
+  async function handleSaveStart() {
+    setStartError(null)
+    const result = await setBudgetStart(sel)
+    if (result.error) {
+      setStartError(result.error.graphQLErrors[0]?.message ?? result.error.message)
+      return
+    }
+    refetch()
+  }
 
   async function handleCreateInvite() {
     setError(null)
@@ -102,6 +118,28 @@ export default function SettingsPage() {
               )}
             </>
           )}
+        </Stack>
+      </Card>
+
+      <Card sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            Budget
+          </Typography>
+
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            The month your budget begins. Earlier months are hidden from the stepper, for both of
+            you.
+          </Typography>
+
+          {startError && <Alert severity="error">{startError}</Alert>}
+
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <MonthStepper value={sel} onChange={setSel} />
+            <Button variant="contained" onClick={handleSaveStart} disabled={!startDirty || savingStart}>
+              Save
+            </Button>
+          </Stack>
         </Stack>
       </Card>
 

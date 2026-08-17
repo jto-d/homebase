@@ -10,7 +10,6 @@ export const SIDEBAR_WIDTH = 200
 
 /** Only routes that exist. A feature brief adds its own line when it lands. */
 const NAV_ITEMS = [
-  { href: '/', label: 'Home' },
   { href: '/budget', label: 'Budget' },
   { href: '/transactions', label: 'Transactions' },
   { href: '/split', label: 'Split' },

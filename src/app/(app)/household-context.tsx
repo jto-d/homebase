@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react'
 import type { Member } from '@/components/MemberAvatar'
+import type { MonthSel } from '@/components/MonthStepper'
 
 export interface HouseholdContextValue {
   householdId: string
@@ -10,6 +11,8 @@ export interface HouseholdContextValue {
   /** The other member, or null while the household is still solo. */
   partner: Member | null
   members: Member[]
+  /** The month the budget begins, or null if unset. */
+  budgetStart: MonthSel | null
   /** Re-run the household query from the network, after a mutation. */
   refetch: () => void
 }

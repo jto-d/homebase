@@ -90,7 +90,7 @@ export function JoinCard({ code }: { code: string }) {
     // householdId just changed — refresh the JWT before navigating so the gated
     // layout and the shell agree on which household this is.
     await update()
-    router.push('/')
+    router.push('/budget')
   }
 
   return (

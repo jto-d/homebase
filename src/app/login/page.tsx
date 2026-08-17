@@ -30,7 +30,7 @@ export default function LoginPage() {
             variant="contained"
             size="large"
             fullWidth
-            onClick={() => signIn('google', { callbackUrl: '/' })}
+            onClick={() => signIn('google', { callbackUrl: '/budget' })}
             sx={{ mt: 1 }}
           >
             Continue with Google

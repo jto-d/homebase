@@ -42,6 +42,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const members = data.household.members
   const me = members.find((m) => m.id === data.me.id) ?? members[0]
   const partner = members.find((m) => m.id !== me.id) ?? null
+  const { budgetStartYear, budgetStartMonth } = data.household
+  const budgetStart =
+    budgetStartYear != null && budgetStartMonth != null
+      ? { year: budgetStartYear, month: budgetStartMonth }
+      : null
 
   return (
     <HouseholdProvider
@@ -50,6 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         me,
         partner,
         members,
+        budgetStart,
         refetch: () => reexecuteQuery({ requestPolicy: 'network-only' }),
       }}
     >
@@ -68,7 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Typography
             component={Link}
-            href="/"
+            href="/budget"
             variant="h6"
             sx={{ fontWeight: 700, color: 'primary.main', textDecoration: 'none' }}
           >
