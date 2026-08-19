@@ -70,8 +70,10 @@ export function LedgerRow({
   onToggleExpand,
   indent,
 }: LedgerRowProps) {
-  const available = carried + budget
-  const remaining = available - spent
+  // Carried folds into spent, not budget — a debt from last month reads as
+  // already-spent this month, a banked surplus reads as spend below zero.
+  const netSpent = spent - carried
+  const remaining = budget - netSpent
   const over = remaining < -0.001
   const isSavings = annualLimit != null
 
@@ -123,7 +125,7 @@ export function LedgerRow({
             <EditableMoney value={spent} onChange={onSpent} weight={500} />
           ) : (
             <Typography sx={{ ...tabularNums, fontSize: 14, fontWeight: 500, color: 'text.disabled' }}>
-              {fmtDollars(spent)}
+              {rollsOver ? fmtSigned(netSpent) : fmtDollars(spent)}
             </Typography>
           )}
         </Row>
@@ -134,7 +136,7 @@ export function LedgerRow({
             sx={{
               ...tabularNums,
               // Amber before red: "nearly out" is worth knowing a week early.
-              color: over ? brand.red[600] : remaining < available * 0.12 ? brand.amber[700] : 'text.secondary',
+              color: over ? brand.red[600] : remaining < budget * 0.12 ? brand.amber[700] : 'text.secondary',
             }}
           >
             {fmtSigned(remaining)}
