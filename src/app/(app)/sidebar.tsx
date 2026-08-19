@@ -12,6 +12,7 @@ export const SIDEBAR_WIDTH = 200
 const NAV_ITEMS = [
   { href: '/budget', label: 'Budget' },
   { href: '/transactions', label: 'Transactions' },
+  { href: '/accounts', label: 'Accounts' },
   { href: '/split', label: 'Split' },
   { href: '/settings', label: 'Settings' },
 ]

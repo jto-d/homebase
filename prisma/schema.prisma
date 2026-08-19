@@ -80,6 +80,10 @@ model PlaidItem {
   cursor          String?
   createdAt       DateTime  @default(now())
   lastSyncedAt    DateTime?
+  /// Linked for balances/holdings only — its institution has no transactions
+  /// product (brokerages typically don't). Excluded from syncPlaidTransactions,
+  /// which would otherwise throw for the whole household on this item.
+  investmentsOnly Boolean   @default(false)
 
   householdId String
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)

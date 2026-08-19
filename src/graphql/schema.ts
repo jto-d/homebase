@@ -16,5 +16,7 @@ import './plaid/mutations'
 import './settlement/type'
 import './settlement/queries'
 import './settlement/mutations'
+import './account/type'
+import './account/queries'
 
 export const schema = builder.toSchema()

@@ -15,7 +15,10 @@ async function assertMember(householdId: string, userId: string): Promise<void> 
 
 builder.mutationFields((t) => ({
   createPlaidLinkToken: t.string({
-    resolve: async (_root, _args, ctx) => {
+    args: {
+      investments: t.arg.boolean({ description: 'Link for balances/holdings (brokerage) rather than transactions.' }),
+    },
+    resolve: async (_root, { investments }, ctx) => {
       const { userId } = requireAuth(ctx)
       // Only set for OAuth-required banks (Chase, Capital One, ...) — Plaid rejects
       // any redirect_uri that isn't https and pre-registered in its Dashboard, so
@@ -25,7 +28,7 @@ builder.mutationFields((t) => ({
         plaidClient.linkTokenCreate({
           user: { client_user_id: userId },
           client_name: 'Homebase',
-          products: [Products.Transactions],
+          products: investments ? [Products.Investments] : [Products.Transactions],
           country_codes: [CountryCode.Us],
           language: 'en',
           ...(redirectUri ? { redirect_uri: redirectUri } : {}),
@@ -41,8 +44,9 @@ builder.mutationFields((t) => ({
       publicToken: t.arg.string({ required: true }),
       institutionName: t.arg.string({ required: true }),
       ownerId: t.arg.string({ description: 'Who this account belongs to. Omit for joint.' }),
+      investmentsOnly: t.arg.boolean({ description: 'Excludes this item from transaction sync.' }),
     },
-    resolve: async (query, _root, { publicToken, institutionName, ownerId }, ctx) => {
+    resolve: async (query, _root, { publicToken, institutionName, ownerId, investmentsOnly }, ctx) => {
       const { householdId } = requireAuth(ctx)
       if (ownerId) await assertMember(householdId, ownerId)
 
@@ -56,6 +60,7 @@ builder.mutationFields((t) => ({
           accessToken: exchange.data.access_token,
           institutionName,
           ownerId: ownerId ?? null,
+          investmentsOnly: investmentsOnly ?? false,
         },
       })
     },
@@ -87,7 +92,9 @@ builder.mutationFields((t) => ({
     resolve: async (_root, _args, ctx) => {
       const { householdId } = requireAuth(ctx)
       const [items, household] = await Promise.all([
-        prisma.plaidItem.findMany({ where: { householdId } }),
+        // investmentsOnly items (e.g. a brokerage) have no transactions product —
+        // syncing them would just throw.
+        prisma.plaidItem.findMany({ where: { householdId, investmentsOnly: false } }),
         prisma.household.findUniqueOrThrow({
           where: { id: householdId },
           select: { budgetStartYear: true, budgetStartMonth: true },

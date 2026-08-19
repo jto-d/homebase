@@ -30,7 +30,7 @@ import {
   TransactionsMonthDocument,
 } from './transactions.queries'
 import { AddTransactionDialog } from './add-transaction-dialog'
-import { LinkBankDialog } from './link-bank-dialog'
+import { LinkBankDialog } from '@/components/LinkBankDialog'
 import { TransactionRow, type CategoryGroup } from './transaction-row'
 import { SplitShareDialog } from './split-share-dialog'
 import type { TransactionsMonthQuery } from '@/gql/graphql'
@@ -167,7 +167,7 @@ export default function TransactionsPage() {
           sx={{
             px: 2.5,
             pt: 2,
-            pb: 0.5,
+            pb: collapsed ? 2 : 0.5,
             cursor: 'pointer',
             '&:hover': { bgcolor: 'grey.50' },
           }}
@@ -180,7 +180,7 @@ export default function TransactionsPage() {
               transition: 'transform 0.18s ease',
             }}
           />
-          <Eyebrow sx={{ color: tone }}>{title}</Eyebrow>
+          <Eyebrow sx={{ color: tone, lineHeight: 1 }}>{title}</Eyebrow>
           <Box
             sx={{
               display: 'inline-grid',

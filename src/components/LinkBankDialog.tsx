@@ -18,6 +18,8 @@ interface LinkBankDialogProps {
   onClose: () => void
   members: Member[]
   meId: string
+  title?: string
+  subtitle?: string
   createLinkToken: () => Promise<string | null>
   onLinked: (input: { publicToken: string; institutionName: string; ownerId: string | null }) => Promise<boolean>
 }
@@ -26,7 +28,16 @@ interface LinkBankDialogProps {
  * Owner picker, then Plaid's hosted Link flow. One connection = one owner —
  * see the "per bank connection" attribution decision in the Plaid plan.
  */
-export function LinkBankDialog({ open, onClose, members, meId, createLinkToken, onLinked }: LinkBankDialogProps) {
+export function LinkBankDialog({
+  open,
+  onClose,
+  members,
+  meId,
+  title = 'Link a bank',
+  subtitle = 'Transactions from this account will import under the owner you pick here.',
+  createLinkToken,
+  onLinked,
+}: LinkBankDialogProps) {
   const [owner, setOwner] = useState(meId)
   const [linkToken, setLinkToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -70,8 +81,8 @@ export function LinkBankDialog({ open, onClose, members, meId, createLinkToken, 
     <AppDialog
       open={open}
       onClose={() => { setError(null); onClose() }}
-      title="Link a bank"
-      subtitle="Transactions from this account will import under the owner you pick here."
+      title={title}
+      subtitle={subtitle}
       width={420}
     >
       <Stack spacing={2} sx={{ p: '4px 22px 22px' }}>
