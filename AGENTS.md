@@ -23,9 +23,9 @@ A **two-person** personal finance app. Homebase is a ground-up rebuild of Anchor
 single-user app, still at `../anchor` for reference) around a shared `Household` rather than a
 flat per-user scope.
 
-Right now the repo contains only the **foundation**: auth, households, the invite/pairing flow, and
-the ownership convention below. Perks, Cards, Budgeting, and Subscriptions each get their own
-design brief and land on top of this.
+The repo contains the **foundation** (auth, households, the invite/pairing flow, the ownership
+convention below) plus the features landed on top of it so far: Budgeting, Accounts, Split, and
+Cards & Perks (see below). Subscriptions still gets its own design brief.
 
 ## Ask before acting
 
@@ -193,6 +193,33 @@ partner the second, so every household looks the same. `MemberAvatar`
 (`src/components/MemberAvatar.tsx`) is the shared "whose is whose" primitive — card ownership tags,
 budget attribution, and split rows should all render identity through it rather than reinventing a
 badge.
+
+## Cards & Perks
+
+A household-scoped port of Anchor's card/perk tracker (`../anchor/src/utils/{perk,card,cardRewards}.ts`,
+`src/data/{cardCatalog,perkCatalog}.ts`) — same models, same cycle math, same catalogs, ported
+verbatim rather than redesigned. `src/graphql/creditCard/`, `src/app/(app)/cards/`.
+
+- **`CreditCard.ownerId` is the one deliberate exception to the nullable-`ownerId` convention
+  above — it is required, not nullable.** A card is issued to one person; there is no joint card,
+  and the whole Cards page groups and totals by owner. Every other domain keeps `ownerId` nullable.
+- `src/lib/cardCatalog.ts` and `src/lib/perkCatalog.ts` are **data, not code** — a ~80-card catalog
+  (branding, network, annual fee, reward multipliers) and per-product perk templates, both copied
+  from Anchor unedited. Don't "clean up" or restructure them; a diff against Anchor's copy should
+  stay a diff of content, not shape.
+- `src/lib/perk.ts` is the reason the feature works: reset-cycle windows (calendar and
+  card-anniversary, all five `PerkPeriod`s) and `perkCoverage` — the single "how much of this perk
+  is left" function everything else (`perkStatus`, the tracker, the summary, the detail page)
+  routes through. It runs **client-side** against the `CreditCards` query payload, not in a
+  resolver — one implementation serving three screens instead of one per screen.
+- Two timezone conventions coexist on purpose and must not be mixed: `src/lib/perk.ts` builds
+  cycle windows in **local** time and parses a stored date as `date + 'T00:00:00'`; the budgeting
+  domain (`src/lib/budget.ts`, `src/lib/format.ts`) reads dates in **UTC**. Each is correct for its
+  own domain.
+- `src/lib/card.ts` (annual-fee ROI: `cardVerdict` — Worth it / Marginal / Review it / No annual
+  fee) and `src/lib/cardRewards.ts` (best-card-by-category ranking, `CARD_CATALOG` ↔ GraphQL
+  bridge) round out the port. `annualFee` is resolved from the catalog in the GraphQL layer
+  (`CreditCard.annualFee`) — never stored on the row.
 
 ## urql client
 

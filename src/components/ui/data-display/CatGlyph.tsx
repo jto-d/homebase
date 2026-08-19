@@ -23,6 +23,17 @@ import WalletIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUpOutlined'
 import CalendarIcon from '@mui/icons-material/CalendarMonthOutlined'
 import BanknoteIcon from '@mui/icons-material/PaidOutlined'
+import CreditCardIcon from '@mui/icons-material/CreditCardOutlined'
+import RedeemIcon from '@mui/icons-material/RedeemOutlined'
+import LightbulbIcon from '@mui/icons-material/LightbulbOutlined'
+import LuggageIcon from '@mui/icons-material/LuggageOutlined'
+import FlightIcon from '@mui/icons-material/FlightOutlined'
+import HotelIcon from '@mui/icons-material/HotelOutlined'
+import LiveTvIcon from '@mui/icons-material/LiveTvOutlined'
+import LocalPharmacyIcon from '@mui/icons-material/LocalPharmacyOutlined'
+import PublicIcon from '@mui/icons-material/PublicOutlined'
+import CategoryIcon from '@mui/icons-material/CategoryOutlined'
+import PercentIcon from '@mui/icons-material/PercentOutlined'
 import { brand } from '@/lib/theme'
 
 /**
@@ -56,6 +67,19 @@ const ICON_MAP: Record<string, React.ElementType> = {
   trendingUp: TrendingUpIcon,
   calendar: CalendarIcon,
   banknote: BanknoteIcon,
+  // Cards & Perks
+  creditCard: CreditCardIcon,
+  redeem: RedeemIcon,
+  lightbulb: LightbulbIcon,
+  luggage: LuggageIcon,
+  travel: LuggageIcon,
+  flight: FlightIcon,
+  hotel: HotelIcon,
+  streaming: LiveTvIcon,
+  drugstore: LocalPharmacyIcon,
+  portal: PublicIcon,
+  category: CategoryIcon,
+  percent: PercentIcon,
 }
 
 const TONE_STYLES = {

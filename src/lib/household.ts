@@ -79,6 +79,7 @@ export async function migrateHouseholdRecords(
   await tx.transaction.updateMany(move)
   await tx.plaidItem.updateMany(move)
   await tx.settlement.updateMany(move)
+  await tx.creditCard.updateMany(move)
 }
 
 /** Consume an invite and clear out any other outstanding invites for the household. */

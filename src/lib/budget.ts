@@ -70,7 +70,7 @@ export function roundCents(amount: number): number {
 }
 
 /** Sum money via integer cents, so a column of rows can't accumulate float drift. */
-function sumMoney<T>(items: readonly T[], of: (item: T) => number): number {
+export function sumMoney<T>(items: readonly T[], of: (item: T) => number): number {
   return items.reduce((cents, item) => cents + toCents(of(item)), 0) / 100
 }
 

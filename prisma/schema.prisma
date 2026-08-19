@@ -39,6 +39,7 @@ model Household {
   transactions  Transaction[]
   plaidItems    PlaidItem[]
   settlements   Settlement[]
+  creditCards   CreditCard[]
 }
 
 model User {
@@ -63,6 +64,7 @@ model User {
   plaidItems       PlaidItem[]
   settlementsPaid     Settlement[] @relation("SettlementsPaid")
   settlementsReceived Settlement[] @relation("SettlementsReceived")
+  creditCards         CreditCard[]
 
   @@index([householdId])
 }
@@ -341,4 +343,81 @@ model Settlement {
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId, date])
+}
+
+enum PerkPeriod {
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+  QUADRENNIAL
+}
+
+enum ResetType {
+  CALENDAR
+  ANNIVERSARY
+}
+
+/// A credit card in someone's wallet. `design` is the join key into the static
+/// catalogs (src/lib/cardCatalog.ts, src/lib/perkCatalog.ts) that hold branding,
+/// network, annual fee and reward multipliers — none of that is stored here.
+model CreditCard {
+  id         String    @id @default(cuid())
+  name       String
+  issuer     String
+  /// Catalog slug, e.g. "amex-gold". Null = a card typed in by hand, which
+  /// falls back to FALLBACK_CARD art and carries no auto-added perks.
+  design     String?
+  lastFour   String?
+  /// Drives ANNIVERSARY perk cycles below. Null = calendar cycles only.
+  openedDate DateTime? @db.Date
+  createdAt  DateTime  @default(now())
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  /// Required, unlike the household's usual nullable ownerId convention: a
+  /// credit card is issued to one person, and the whole Cards page groups and
+  /// totals by owner. There is no joint card.
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  perks Perk[]
+
+  @@index([householdId])
+}
+
+/// A recurring benefit on a card — a statement credit, a lounge membership.
+/// Snapshotted from PERK_CATALOG onto the card at add time, so a later catalog
+/// edit doesn't retroactively change perks someone already has.
+model Perk {
+  id                 String     @id @default(cuid())
+  creditCardId       String
+  name               String
+  /// Per-period cap. 0 = open-ended (e.g. lounge access): value is logged for
+  /// visibility, not measured against a budget. See perkCoverage in src/lib/perk.ts.
+  totalAmount        Decimal    @db.Decimal(10, 2)
+  period             PerkPeriod
+  resetType          ResetType  @default(CALENDAR)
+  enrollmentRequired Boolean    @default(false)
+  notes              String?
+  createdAt          DateTime   @default(now())
+
+  creditCard  CreditCard   @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  perkCredits PerkCredit[]
+}
+
+/// One logged use of a perk — "redeemed $10 of the Uber Cash credit on Aug 3."
+/// Append-only ledger, never a used/unused flag: perkCoverage sums these against
+/// the perk's current cycle (or the calendar year) to get what's left.
+model PerkCredit {
+  id          String   @id @default(cuid())
+  perkId      String
+  amount      Decimal  @db.Decimal(10, 2)
+  date        DateTime @db.Date
+  description String?
+  createdAt   DateTime @default(now())
+
+  perk Perk @relation(fields: [perkId], references: [id], onDelete: Cascade)
+
+  @@index([perkId])
 }

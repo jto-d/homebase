@@ -18,5 +18,8 @@ import './settlement/queries'
 import './settlement/mutations'
 import './account/type'
 import './account/queries'
+import './creditCard/type'
+import './creditCard/queries'
+import './creditCard/mutations'
 
 export const schema = builder.toSchema()

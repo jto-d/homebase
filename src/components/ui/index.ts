@@ -17,6 +17,7 @@ export { ListRow } from './data-display/ListRow'
 export { PanelHeader } from './data-display/PanelHeader'
 export { ProgressBar } from './data-display/ProgressBar'
 export { Stat } from './data-display/Stat'
+export { StatusChip } from './data-display/StatusChip'
 
 export { EditableLabel } from './inputs/EditableLabel'
 export { EditableMoney } from './inputs/EditableMoney'

@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/budget', label: 'Budget' },
   { href: '/transactions', label: 'Transactions' },
   { href: '/accounts', label: 'Accounts' },
+  { href: '/cards', label: 'Cards' },
   { href: '/split', label: 'Split' },
   { href: '/settings', label: 'Settings' },
 ]
