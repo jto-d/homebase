@@ -61,6 +61,7 @@ export default function TransactionsPage() {
   const [linkOpen, setLinkOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [splitFor, setSplitFor] = useState<Txn | null>(null)
+  const [closed, setClosed] = useState<Record<string, boolean>>({ Filed: true })
 
   const [{ data, fetching }, refetch] = useQuery({ query: TransactionsMonthDocument, variables: sel })
   const [, createTransaction] = useMutation(CreateTransactionDocument)
@@ -155,9 +156,30 @@ export default function TransactionsPage() {
 
   function renderGroup(title: string, tone: string, items: Txn[]) {
     if (items.length === 0) return null
+    const collapsed = !!closed[title]
     return (
       <Box key={title}>
-        <Stack direction="row" align="center" gap={1} sx={{ px: 2.5, pt: 2, pb: 0.5 }}>
+        <Stack
+          direction="row"
+          align="center"
+          gap={1}
+          onClick={() => setClosed((p) => ({ ...p, [title]: !p[title] }))}
+          sx={{
+            px: 2.5,
+            pt: 2,
+            pb: 0.5,
+            cursor: 'pointer',
+            '&:hover': { bgcolor: 'grey.50' },
+          }}
+        >
+          <ExpandMoreIcon
+            sx={{
+              fontSize: 16,
+              color: 'text.secondary',
+              transform: collapsed ? 'rotate(-90deg)' : 'none',
+              transition: 'transform 0.18s ease',
+            }}
+          />
           <Eyebrow sx={{ color: tone }}>{title}</Eyebrow>
           <Box
             sx={{
@@ -176,23 +198,25 @@ export default function TransactionsPage() {
             {items.length}
           </Box>
         </Stack>
-        {items.map((txn, i) => (
-          <TransactionRow
-            key={txn.id}
-            txn={txn}
-            payerLabel={payerLabel(txn)}
-            accountLabel={accountLabel(txn)}
-            counterparty={counterpartyFor(txn)}
-            currentPath={txn.splits[0] ? (pathById.get(txn.splits[0].budgetId) ?? null) : null}
-            counterpartyAmount={counterpartyAmount(txn)}
-            categoryGroups={categoryGroups}
-            onSetCategory={(path) => run(() => setCategory({ id: txn.id, path }))}
-            onSetShared={(shared) => run(() => setShared({ id: txn.id, shared }))}
-            onOpenSplit={() => setSplitFor(txn)}
-            onDelete={() => run(() => deleteTransaction({ id: txn.id }))}
-            last={i === items.length - 1}
-          />
-        ))}
+        <Collapse in={!collapsed}>
+          {items.map((txn, i) => (
+            <TransactionRow
+              key={txn.id}
+              txn={txn}
+              payerLabel={payerLabel(txn)}
+              accountLabel={accountLabel(txn)}
+              counterparty={counterpartyFor(txn)}
+              currentPath={txn.splits[0] ? (pathById.get(txn.splits[0].budgetId) ?? null) : null}
+              counterpartyAmount={counterpartyAmount(txn)}
+              categoryGroups={categoryGroups}
+              onSetCategory={(path) => run(() => setCategory({ id: txn.id, path }))}
+              onSetShared={(shared) => run(() => setShared({ id: txn.id, shared }))}
+              onOpenSplit={() => setSplitFor(txn)}
+              onDelete={() => run(() => deleteTransaction({ id: txn.id }))}
+              last={i === items.length - 1}
+            />
+          ))}
+        </Collapse>
       </Box>
     )
   }
