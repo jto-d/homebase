@@ -66,6 +66,12 @@ export const SetTransactionSharedDocument = graphql(`
   }
 `)
 
+export const SetTransactionSplitAmountDocument = graphql(`
+  mutation SetTransactionSplitAmount($id: String!, $partnerAmount: Float!) {
+    setTransactionSplitAmount(id: $id, partnerAmount: $partnerAmount)
+  }
+`)
+
 export const DeleteTransactionDocument = graphql(`
   mutation DeleteTransaction($id: String!) {
     deleteTransaction(id: $id)

@@ -6,11 +6,13 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
+import Collapse from '@mui/material/Collapse'
 import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/AddOutlined'
 import SyncIcon from '@mui/icons-material/SyncOutlined'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalanceOutlined'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined'
 import { MonthStepper, currentMonth } from '@/components/MonthStepper'
 import { Eyebrow, ProgressBar, Segmented, Stack, SurfaceCard } from '@/components/ui'
 import { memberLabel } from '@/lib/members'
@@ -23,12 +25,14 @@ import {
   LinkPlaidItemDocument,
   SetTransactionCategoryDocument,
   SetTransactionSharedDocument,
+  SetTransactionSplitAmountDocument,
   SyncPlaidTransactionsDocument,
   TransactionsMonthDocument,
 } from './transactions.queries'
 import { AddTransactionDialog } from './add-transaction-dialog'
 import { LinkBankDialog } from './link-bank-dialog'
 import { TransactionRow, type CategoryGroup } from './transaction-row'
+import { SplitShareDialog } from './split-share-dialog'
 import type { TransactionsMonthQuery } from '@/gql/graphql'
 
 type Txn = TransactionsMonthQuery['transactions'][number]
@@ -56,11 +60,13 @@ export default function TransactionsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [splitFor, setSplitFor] = useState<Txn | null>(null)
 
   const [{ data, fetching }, refetch] = useQuery({ query: TransactionsMonthDocument, variables: sel })
   const [, createTransaction] = useMutation(CreateTransactionDocument)
   const [, setCategory] = useMutation(SetTransactionCategoryDocument)
   const [, setShared] = useMutation(SetTransactionSharedDocument)
+  const [, setSplitAmount] = useMutation(SetTransactionSplitAmountDocument)
   const [, deleteTransaction] = useMutation(DeleteTransactionDocument)
   const [, createLinkToken] = useMutation(CreatePlaidLinkTokenDocument)
   const [, linkPlaidItem] = useMutation(LinkPlaidItemDocument)
@@ -75,6 +81,23 @@ export default function TransactionsPage() {
       : null
 
   const pathById = useMemo(() => new Map(leaves.map((l) => [l.id, l.path])), [leaves])
+  const ownerById = useMemo(() => new Map(leaves.map((l) => [l.id, l.ownerId])), [leaves])
+
+  /** Whoever didn't pay — always "me and Christina", never the payer twice. */
+  function counterpartyFor(txn: Txn): typeof partner {
+    if (!partner) return null
+    const payerId = txn.ownerId ?? me.id
+    return payerId === me.id ? partner : me
+  }
+
+  /** Sum of a transaction's splits that landed on the non-payer's tree. */
+  function counterpartyAmount(txn: Txn): number | null {
+    if (txn.shared !== true) return null
+    const payerId = txn.ownerId ?? me.id
+    return txn.splits
+      .filter((s) => ownerById.get(s.budgetId) !== payerId)
+      .reduce((total, s) => total + s.amount, 0)
+  }
   const categoryGroups = useMemo(
     () => groupPaths(Array.from(new Set(leaves.map((l) => l.path))).sort()),
     [leaves]
@@ -159,11 +182,13 @@ export default function TransactionsPage() {
             txn={txn}
             payerLabel={payerLabel(txn)}
             accountLabel={accountLabel(txn)}
-            partner={partner}
+            counterparty={counterpartyFor(txn)}
             currentPath={txn.splits[0] ? (pathById.get(txn.splits[0].budgetId) ?? null) : null}
+            counterpartyAmount={counterpartyAmount(txn)}
             categoryGroups={categoryGroups}
             onSetCategory={(path) => run(() => setCategory({ id: txn.id, path }))}
             onSetShared={(shared) => run(() => setShared({ id: txn.id, shared }))}
+            onOpenSplit={() => setSplitFor(txn)}
             onDelete={() => run(() => deleteTransaction({ id: txn.id }))}
             last={i === items.length - 1}
           />
@@ -267,6 +292,28 @@ export default function TransactionsPage() {
           return ok
         }}
       />
+
+      {splitFor && counterpartyFor(splitFor) && (
+        <SplitShareDialog
+          open={splitFor != null}
+          onClose={() => setSplitFor(null)}
+          merchant={splitFor.merchant}
+          amount={splitFor.amount}
+          payer={members.find((m) => m.id === splitFor.ownerId) ?? me}
+          counterparty={counterpartyFor(splitFor)!}
+          initialCounterpartyAmount={counterpartyAmount(splitFor)}
+          onSubmit={async (share) => {
+            const ok = report(await setSplitAmount({ id: splitFor.id, partnerAmount: share }))
+            if (ok) reload()
+            return ok
+          }}
+          onUnsplit={async () => {
+            const ok = report(await setShared({ id: splitFor.id, shared: null }))
+            if (ok) reload()
+            return ok
+          }}
+        />
+      )}
 
       <LinkBankDialog
         open={linkOpen}

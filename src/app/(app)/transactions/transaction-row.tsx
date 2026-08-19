@@ -30,11 +30,15 @@ interface TransactionRowProps {
   txn: Txn
   payerLabel: string
   accountLabel: string | null
-  partner: Member | null
+  /** The other household member for this transaction — whoever didn't pay. Null while solo. */
+  counterparty: Member | null
   currentPath: string | null
+  /** The counterparty's current share in dollars, or null if undecided/not split. */
+  counterpartyAmount: number | null
   categoryGroups: CategoryGroup[]
   onSetCategory: (path: string | null) => void
   onSetShared: (shared: boolean | null) => void
+  onOpenSplit: () => void
   onDelete: () => void
   last?: boolean
 }
@@ -55,15 +59,18 @@ export function TransactionRow({
   txn,
   payerLabel,
   accountLabel,
-  partner,
+  counterparty,
   currentPath,
+  counterpartyAmount,
   categoryGroups,
   onSetCategory,
   onSetShared,
+  onOpenSplit,
   onDelete,
   last,
 }: TransactionRowProps) {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const [splitMenuAnchor, setSplitMenuAnchor] = useState<HTMLElement | null>(null)
   const hasCategory = currentPath != null
 
   return (
@@ -130,17 +137,36 @@ export function TransactionRow({
           )}
         </Menu>
 
-        {/* Split / File — only once a category is set, and only with a partner */}
-        {hasCategory && partner && txn.shared == null && (
+        {/* Split / File — only once a category is set, and only with a counterparty */}
+        {hasCategory && counterparty && txn.shared == null && (
           <>
             <Box
               component="button"
-              onClick={() => onSetShared(true)}
+              onClick={(e) => setSplitMenuAnchor(e.currentTarget)}
               sx={{ ...chipBase, px: '11px', py: '5px', borderColor: 'divider', bgcolor: '#fff', color: 'text.secondary', fontWeight: 500 }}
             >
               <AddIcon sx={{ fontSize: 13 }} />
               Split 50/50
+              <ExpandMoreIcon sx={{ fontSize: 14, opacity: 0.7 }} />
             </Box>
+            <Menu anchorEl={splitMenuAnchor} open={splitMenuAnchor != null} onClose={() => setSplitMenuAnchor(null)}>
+              <MenuItem
+                onClick={() => {
+                  onSetShared(true)
+                  setSplitMenuAnchor(null)
+                }}
+              >
+                50/50
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  onOpenSplit()
+                  setSplitMenuAnchor(null)
+                }}
+              >
+                Custom…
+              </MenuItem>
+            </Menu>
             <Box
               component="button"
               onClick={() => onSetShared(false)}
@@ -150,18 +176,22 @@ export function TransactionRow({
             </Box>
           </>
         )}
-        {hasCategory && partner && txn.shared === true && (
+        {hasCategory && counterparty && txn.shared === true && (
           <Box
             component="button"
-            onClick={() => onSetShared(null)}
-            title="Click to undo the split"
+            onClick={onOpenSplit}
+            title="Click to change the split"
             sx={{ ...chipBase, px: '10px', py: '4px', borderColor: 'divider', bgcolor: '#fff', color: 'text.primary', fontWeight: 600 }}
           >
-            <MemberAvatar member={partner} size={19} />
-            Split 50/50
+            <MemberAvatar member={counterparty} size={19} />
+            {Math.abs((counterpartyAmount ?? 0) - txn.amount / 2) < 0.01
+              ? 'Split 50/50'
+              : Math.abs((counterpartyAmount ?? 0) - txn.amount) < 0.01
+                ? `${payerLabel} owes nothing`
+                : fmtMoney(counterpartyAmount ?? 0)}
           </Box>
         )}
-        {hasCategory && partner && txn.shared === false && (
+        {hasCategory && counterparty && txn.shared === false && (
           <Box
             component="button"
             onClick={() => onSetShared(null)}

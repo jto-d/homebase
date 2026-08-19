@@ -49,18 +49,19 @@ async function assertBudgets(householdId: string, budgetIds: readonly string[]):
 }
 
 /**
- * Recompute a transaction's splits from a category path + share decision, and
- * write both in one go. The single writer behind `setTransactionCategory` and
- * `setTransactionShared` — whichever one is called, the resulting splits only
- * ever depend on these three inputs, never on what the splits used to be.
+ * Recompute a transaction's splits from a category path + the partner's share
+ * in cents, and write both in one go. The single writer behind
+ * `setTransactionCategory`, `setTransactionShared`, and
+ * `setTransactionSplitAmount` — whichever one is called, the resulting splits
+ * only ever depend on these inputs, never on what the splits used to be.
  *
  * `path == null` clears the transaction back to fully unfiled: no splits, no
  * share decision (there is nothing left to have decided).
  *
- * `shared === true` needs a same-path leaf on both people's trees; `shared` is
- * `false` or `null` otherwise, which look identical on disk (one leaf, the
- * payer's, for the whole amount) and differ only in whether the decision has
- * been made — that's what keeps a row in "Needs assignment" vs "Filed".
+ * `partnerCents == null` means undecided (one payer-only split, `shared:
+ * null`). Otherwise `shared` is derived from it: `0` = all on the payer
+ * (`false`), anything else = the partner has a share (`true`) — including the
+ * full amount, a straight reimbursement with one split on the partner's leaf.
  *
  * ponytail: a joint transaction (`ownerId` null) files to whoever clicked, via
  * `payerId`. Upgrade: prompt for a payer before allowing a joint txn to be filed.
@@ -71,7 +72,7 @@ async function refileTransaction(
   txnId: string,
   amount: number,
   path: string | null,
-  shared: boolean | null
+  partnerCents: number | null
 ): Promise<void> {
   if (path == null) {
     await prisma.$transaction((tx) => replaceSplits(tx, txnId, []))
@@ -84,23 +85,22 @@ async function refileTransaction(
     select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
   })
   const leaves: BudgetLeaf[] = budgetLeaves(nodes)
-  const payerLeaf = leaves.find((l) => l.ownerId === payerId && l.path === path)
-  if (!payerLeaf) throw new UserFacingError(`No "${path}" budget to file into`)
+  const findLeaf = (ownerId: string) => leaves.find((l) => l.ownerId === ownerId && l.path === path)
 
-  let splits: SplitInput[]
-  if (shared === true) {
+  const shared = partnerCents == null ? null : partnerCents > 0
+  const totalCents = toCents(amount)
+  const payerCents = partnerCents == null ? totalCents : totalCents - partnerCents
+
+  const splits: SplitInput[] = []
+  if (payerCents > 0) {
+    const payerLeaf = findLeaf(payerId)
+    if (!payerLeaf) throw new UserFacingError(`No "${path}" budget to file into`)
+    splits.push({ budgetId: payerLeaf.id, amount: payerCents / 100 })
+  }
+  if (partnerCents != null && partnerCents > 0) {
     const partnerLeaf = leaves.find((l) => l.ownerId !== payerId && l.path === path)
     if (!partnerLeaf) throw new UserFacingError(`Your partner has no "${path}" budget to split into`)
-    // Whole cents only, so the two shares sum back to the exact total —
-    // the odd cent on an uneven split lands on the payer.
-    const totalCents = toCents(amount)
-    const payerCents = totalCents - Math.floor(totalCents / 2)
-    splits = [
-      { budgetId: payerLeaf.id, amount: payerCents / 100 },
-      { budgetId: partnerLeaf.id, amount: (totalCents - payerCents) / 100 },
-    ]
-  } else {
-    splits = [{ budgetId: payerLeaf.id, amount }]
+    splits.push({ budgetId: partnerLeaf.id, amount: partnerCents / 100 })
   }
 
   const decision = validateSplits(amount, splits)
@@ -714,17 +714,28 @@ builder.mutationFields((t) => ({
       const { householdId, userId } = requireAuth(ctx)
       const txn = await prisma.transaction.findFirst({
         where: { id, householdId },
-        select: { amount: true, ownerId: true, shared: true },
+        select: {
+          amount: true,
+          ownerId: true,
+          splits: { select: { amount: true, budget: { select: { ownerId: true } } } },
+        },
       })
       if (!txn) throw new UserFacingError('Transaction not found')
+      const payerId = txn.ownerId ?? userId
+      // Preserve the existing ratio, not just the true/false decision — a
+      // custom split re-categorised should land at the same cents, not reset
+      // to a fresh 50/50.
+      const partnerCents = txn.splits.some((s) => s.budget.ownerId !== payerId)
+        ? txn.splits.filter((s) => s.budget.ownerId !== payerId).reduce((sum, s) => sum + toCents(s.amount.toNumber()), 0)
+        : null
 
       await refileTransaction(
         householdId,
-        txn.ownerId ?? userId,
+        payerId,
         id,
         txn.amount.toNumber(),
         path ?? null,
-        path != null ? txn.shared : null
+        path != null ? partnerCents : null
       )
       return true
     },
@@ -757,14 +768,48 @@ builder.mutationFields((t) => ({
       const currentLeaf = budgetLeaves(nodes).find((l) => l.id === txn.splits[0]!.budgetId)
       if (!currentLeaf) throw new UserFacingError('Budget not found')
 
-      await refileTransaction(
-        householdId,
-        txn.ownerId ?? userId,
-        id,
-        txn.amount.toNumber(),
-        currentLeaf.path,
-        shared ?? null
-      )
+      const partnerCents =
+        shared == null ? null : shared ? Math.floor(toCents(txn.amount.toNumber()) / 2) : 0
+
+      await refileTransaction(householdId, txn.ownerId ?? userId, id, txn.amount.toNumber(), currentLeaf.path, partnerCents)
+      return true
+    },
+  }),
+
+  /**
+   * File a transaction with an exact partner share, for any ratio the two
+   * fixed chips (50/50, all-on-payer) don't cover — including a straight
+   * reimbursement at the full amount. Requires a category first, same as
+   * `setTransactionShared`.
+   */
+  setTransactionSplitAmount: t.boolean({
+    args: {
+      id: t.arg.string({ required: true }),
+      partnerAmount: t.arg.float({ required: true }),
+    },
+    resolve: async (_root, { id, partnerAmount }, ctx) => {
+      const { householdId, userId } = requireAuth(ctx)
+      const txn = await prisma.transaction.findFirst({
+        where: { id, householdId },
+        select: { amount: true, ownerId: true, splits: { select: { budgetId: true }, take: 1 } },
+      })
+      if (!txn) throw new UserFacingError('Transaction not found')
+      if (txn.splits.length === 0) throw new UserFacingError('Pick a budget category first')
+
+      const nodes = await prisma.budgetNode.findMany({
+        where: { householdId },
+        select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+      })
+      const currentLeaf = budgetLeaves(nodes).find((l) => l.id === txn.splits[0]!.budgetId)
+      if (!currentLeaf) throw new UserFacingError('Budget not found')
+
+      const totalCents = toCents(txn.amount.toNumber())
+      const partnerCents = toCents(partnerAmount)
+      if (partnerCents < 0 || partnerCents > totalCents) {
+        throw new UserFacingError('The partner share must be between $0 and the transaction total')
+      }
+
+      await refileTransaction(householdId, txn.ownerId ?? userId, id, txn.amount.toNumber(), currentLeaf.path, partnerCents)
       return true
     },
   }),

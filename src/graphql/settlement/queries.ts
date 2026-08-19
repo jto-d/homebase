@@ -113,6 +113,7 @@ builder.queryFields((t) => ({
           debtorUserId: s.budget.ownerId,
           // The full transaction total, not the cross-owed split share — that's what reads as "the bill".
           amount: s.transaction.amount.toNumber(),
+          owed: s.amount.toNumber(),
         })),
         settlements: monthSettlements,
       }

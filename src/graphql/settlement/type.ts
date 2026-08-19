@@ -31,7 +31,10 @@ export const SplitDebtItemPayload = builder.simpleObject('SplitDebtItemPayload',
     date: t.string(),
     payerUserId: t.string(),
     debtorUserId: t.string(),
+    /// The full transaction total — what reads as "the bill".
     amount: t.float(),
+    /// The debtor's actual share, which can differ from `amount` on an uneven split.
+    owed: t.float(),
   }),
 })
 

@@ -24,6 +24,7 @@ export const SplitPageDocument = graphql(`
         payerUserId
         debtorUserId
         amount
+        owed
       }
       settlements {
         id

@@ -140,10 +140,11 @@ export default function SplitPage() {
                     </Typography>
                     <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
                       {fmtDay(item.date)} · Paid by {labelFor(item.payerUserId)}
+                      {item.owed !== item.amount && ` · of ${fmtMoney(item.amount)}`}
                     </Typography>
                   </Stack>
                   <Typography variant="body2" sx={{ width: 96, textAlign: 'right', fontWeight: 600, ...tabularNums }}>
-                    {fmtMoney(item.amount)}
+                    {fmtMoney(item.owed)}
                   </Typography>
                 </ListRow>
               ))
