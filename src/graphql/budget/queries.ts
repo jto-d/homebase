@@ -2,7 +2,7 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { BudgetLeafPayload, BudgetMonthPayload } from './type'
 import { prisma } from '@/lib/prisma'
-import { monthRange, budgetLeaves, savingsNodeIds } from '@/lib/budget'
+import { monthRange, monthOrdinal, roundCents, budgetLeaves, savingsNodeIds } from '@/lib/budget'
 import { DEFAULT_GROUPS, DEFAULT_INCOME } from '@/lib/budgetDefaults'
 import { UserFacingError } from '@/lib/errors'
 
@@ -50,6 +50,85 @@ async function seedIfEmpty(householdId: string, ownerId: string): Promise<void> 
       })
     ),
   ])
+}
+
+/**
+ * Balance through the end of the month before `sel`, per rollsOver node —
+ * accrued budget minus actual spend since the later of the household's
+ * budget start and the node's own creation. Skipped entirely (no extra
+ * queries) when nothing on the tree rolls over.
+ */
+async function carriedBalances({
+  householdId,
+  ownerId,
+  sel,
+  nodes,
+  household,
+}: {
+  householdId: string
+  ownerId: string
+  sel: { year: number; month: number }
+  nodes: readonly { id: string; budget: { toNumber(): number }; rollsOver: boolean; createdAt: Date }[]
+  household: { budgetStartYear: number | null; budgetStartMonth: number | null } | null
+}): Promise<Map<string, number>> {
+  const rollsOverNodes = nodes.filter((n) => n.rollsOver)
+  const result = new Map<string, number>()
+  if (rollsOverNodes.length === 0) return result
+
+  const householdStart =
+    household?.budgetStartYear != null && household?.budgetStartMonth != null
+      ? { year: household.budgetStartYear, month: household.budgetStartMonth }
+      : null
+
+  // A node created mid-year must not claim accrual from before it existed.
+  const effectiveStart = (node: { createdAt: Date }) => {
+    const created = { year: node.createdAt.getUTCFullYear(), month: node.createdAt.getUTCMonth() + 1 }
+    return householdStart && monthOrdinal(householdStart) > monthOrdinal(created) ? householdStart : created
+  }
+
+  const selOrd = monthOrdinal(sel)
+  const globalStart = rollsOverNodes
+    .map(effectiveStart)
+    .reduce((min, s) => (monthOrdinal(s) < monthOrdinal(min) ? s : min))
+
+  const [priorSpend, priorOverrides] = await Promise.all([
+    prisma.transactionSplit.groupBy({
+      by: ['budgetId'],
+      _sum: { amount: true },
+      where: {
+        budget: { householdId, ownerId, rollsOver: true },
+        transaction: { date: { gte: monthRange(globalStart).gte, lt: monthRange(sel).gte } },
+      },
+    }),
+    prisma.budgetNodeMonth.findMany({
+      where: { node: { householdId, ownerId, rollsOver: true }, budget: { not: null } },
+      select: { nodeId: true, year: true, month: true, budget: true },
+    }),
+  ])
+
+  const priorSpendBy = new Map(priorSpend.map((row) => [row.budgetId, row._sum.amount?.toNumber() ?? 0]))
+  const overridesByNode = new Map<string, Map<number, number>>()
+  for (const row of priorOverrides) {
+    const byMonth = overridesByNode.get(row.nodeId) ?? new Map<number, number>()
+    byMonth.set(monthOrdinal({ year: row.year, month: row.month }), row.budget!.toNumber())
+    overridesByNode.set(row.nodeId, byMonth)
+  }
+
+  for (const node of rollsOverNodes) {
+    const startOrd = monthOrdinal(effectiveStart(node))
+    if (startOrd >= selOrd) {
+      result.set(node.id, 0)
+      continue
+    }
+    const overrides = overridesByNode.get(node.id)
+    let budgeted = 0
+    for (let ord = startOrd; ord < selOrd; ord++) {
+      budgeted += overrides?.get(ord) ?? node.budget.toNumber()
+    }
+    result.set(node.id, roundCents(budgeted - (priorSpendBy.get(node.id) ?? 0)))
+  }
+
+  return result
 }
 
 builder.queryFields((t) => ({
@@ -116,6 +195,7 @@ builder.queryFields((t) => ({
       const spentBy = new Map(monthSpend.map((row) => [row.budgetId, row._sum.amount]))
       const contributedYtdBy = new Map(ytdContributed.map((row) => [row.nodeId, row._sum.contributed]))
       const savings = savingsNodeIds(nodes)
+      const carriedByNode = await carriedBalances({ householdId, ownerId, sel: { year, month }, nodes, household })
 
       return {
         nodes: nodes.map((node) => {
@@ -130,11 +210,13 @@ builder.queryFields((t) => ({
             budget: (node.months[0]?.budget ?? node.budget).toNumber(),
             annualLimit: node.annualLimit?.toNumber() ?? null,
             isSavings: isSavingsNode,
+            rollsOver: node.rollsOver,
             // Savings: the typed transfer for this month. Everything else: splits.
             spent: isSavingsNode
               ? (node.months[0]?.contributed?.toNumber() ?? 0)
               : (spentBy.get(node.id)?.toNumber() ?? 0),
             ytd: isSavingsNode ? (contributedYtdBy.get(node.id)?.toNumber() ?? 0) : 0,
+            carried: carriedByNode.get(node.id) ?? 0,
           }
         }),
         income: income.map((source) => ({

@@ -178,6 +178,10 @@ model BudgetNode {
   /// from transactions, and it drops out of `budgetLeaves` — nothing can be filed
   /// into it.
   isSavings   Boolean  @default(false)
+  /// Unspent budget accrues forward instead of evaporating at month end — for
+  /// lumpy categories (travel, gifts) that sit near zero then take one big hit.
+  /// Unlike `isSavings` this is NOT inherited: it is set per node.
+  rollsOver   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   householdId String

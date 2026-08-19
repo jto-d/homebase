@@ -36,6 +36,7 @@ import {
   SetNodeAnnualLimitDocument,
   SetNodeBudgetDocument,
   SetNodeContributedDocument,
+  SetNodeRolloverDocument,
 } from './budget.queries'
 
 type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
@@ -63,6 +64,7 @@ export default function BudgetPage() {
   const [, setNodeBudget] = useMutation(SetNodeBudgetDocument)
   const [, setAnnualLimit] = useMutation(SetNodeAnnualLimitDocument)
   const [, setContributed] = useMutation(SetNodeContributedDocument)
+  const [, setRollover] = useMutation(SetNodeRolloverDocument)
   const [, addIncome] = useMutation(AddIncomeSourceDocument)
   const [, renameIncome] = useMutation(RenameIncomeSourceDocument)
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
@@ -140,6 +142,7 @@ export default function BudgetPage() {
       run(() => setContributed({ id, ...sel, amount: spent }), { key: `spent:${id}`, value: spent }),
     onAnnualLimit: (id, annualLimit) =>
       run(() => setAnnualLimit({ id, annualLimit }), { key: `limit:${id}`, value: annualLimit }),
+    onRollover: (id, rollsOver) => run(() => setRollover({ id, rollsOver })),
     onToggle: (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] })),
   }
 

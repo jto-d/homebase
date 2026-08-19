@@ -53,6 +53,9 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     /// savings node can't be filed into, and its spend/ytd below are typed
     /// transfers rather than derived from transactions.
     isSavings: t.boolean(),
+    /// Unspent budget accrues forward instead of evaporating at month end. Not
+    /// inherited, unlike `isSavings` — set per node.
+    rollsOver: t.boolean(),
     /// This node's *own* figure for the month: splits, unless `isSavings`, in
     /// which case it's the typed transfer. Children are added on top by the
     /// client, so a node filed/contributed to before it grew children keeps its
@@ -60,6 +63,10 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     spent: t.float(),
     /// January through the selected month. Zero unless `isSavings`.
     ytd: t.float(),
+    /// Balance through the end of the *previous* month: accrued budget minus
+    /// spend since the node started rolling over. Zero unless `rollsOver`. Can
+    /// go negative — overspending one month is a debt against the next.
+    carried: t.float(),
   }),
 })
 

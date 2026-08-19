@@ -23,6 +23,7 @@ export interface LedgerHandlers {
   onBudget: (id: string, value: number) => void
   onContributed: (id: string, value: number) => void
   onAnnualLimit: (id: string, value: number) => void
+  onRollover: (id: string, value: boolean) => void
   onToggle: (id: string) => void
 }
 
@@ -44,7 +45,9 @@ export function BudgetLedger({
   collapsed: Record<string, boolean>
   handlers: LedgerHandlers
 }) {
-  const { onAddChild, onAddGroup, onRename, onDelete, onBudget, onContributed, onAnnualLimit, onToggle } = handlers
+  const { onAddChild, onAddGroup, onRename, onDelete, onBudget, onContributed, onAnnualLimit, onRollover, onToggle } =
+    handlers
+  const totalCarried = roots.reduce((sum, r) => sum + r.carried, 0)
 
   return (
     <SurfaceCard>
@@ -80,12 +83,15 @@ export function BudgetLedger({
                     spent={category.spent}
                     ytd={category.ytd}
                     annualLimit={category.annualLimit}
+                    carried={category.carried}
+                    rollsOver={category.rollsOver}
                     // A category with line items no longer owns its number.
                     onBudget={hasLines ? undefined : (v) => onBudget(category.id, v)}
                     onSpent={
                       category.isSavings && !hasLines ? (v) => onContributed(category.id, v) : undefined
                     }
                     onAnnualLimit={(v) => onAnnualLimit(category.id, v)}
+                    onRollover={category.isSavings ? undefined : (v) => onRollover(category.id, v)}
                     onRename={(label) => onRename(category.id, label)}
                     onRemove={() =>
                       onDelete({ id: category.id, label: category.label, childCount: category.children.length })
@@ -108,9 +114,12 @@ export function BudgetLedger({
                           spent={line.spent}
                           ytd={line.ytd}
                           annualLimit={line.annualLimit}
+                          carried={line.carried}
+                          rollsOver={line.rollsOver}
                           onBudget={(v) => onBudget(line.id, v)}
                           onSpent={line.isSavings ? (v) => onContributed(line.id, v) : undefined}
                           onAnnualLimit={(v) => onAnnualLimit(line.id, v)}
+                          onRollover={line.isSavings ? undefined : (v) => onRollover(line.id, v)}
                           onRename={(label) => onRename(line.id, label)}
                           onRemove={() => onDelete({ id: line.id, label: line.label, childCount: 0 })}
                           indent
@@ -167,7 +176,7 @@ export function BudgetLedger({
         >
           Total budgeted
         </Typography>
-        {[totals.budgeted, totals.spent, totals.budgeted - totals.spent].map((v, i) => (
+        {[totals.budgeted, totals.spent, totalCarried + totals.budgeted - totals.spent].map((v, i) => (
           <Box key={i} sx={{ width: COL_W, textAlign: 'right', ...(i === 2 ? { pr: '8px' } : {}) }}>
             <Typography
               sx={{

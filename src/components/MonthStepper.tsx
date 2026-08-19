@@ -5,6 +5,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import { Row } from '@/components/ui'
+import { monthOrdinal } from '@/lib/budget'
 import { monthLabel } from '@/lib/format'
 import { tabularNums } from '@/lib/sx'
 import { brand } from '@/lib/theme'
@@ -20,14 +21,9 @@ export function currentMonth(): MonthSel {
   return { year: now.getFullYear(), month: now.getMonth() + 1 }
 }
 
-/** Months since year 0 — the one number that makes two selections comparable. */
-function ordinal({ year, month }: MonthSel): number {
-  return year * 12 + (month - 1)
-}
-
 /** Step by whole months without landing on the 31st of a 30-day month. */
 export function step({ year, month }: MonthSel, delta: number): MonthSel {
-  const next = ordinal({ year, month }) + delta
+  const next = monthOrdinal({ year, month }) + delta
   return { year: Math.floor(next / 12), month: (next % 12) + 1 }
 }
 
@@ -48,9 +44,9 @@ export function MonthStepper({
   min?: MonthSel | null
   max?: MonthSel | null
 }) {
-  const here = ordinal(value)
-  const atStart = min != null && here <= ordinal(min)
-  const atEnd = here >= ordinal(max ?? step(currentMonth(), 12))
+  const here = monthOrdinal(value)
+  const atStart = min != null && here <= monthOrdinal(min)
+  const atEnd = here >= monthOrdinal(max ?? step(currentMonth(), 12))
 
   const arrowSx = (disabled: boolean) => ({
     width: 32,

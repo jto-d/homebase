@@ -4,6 +4,7 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
+import AutorenewIcon from '@mui/icons-material/Autorenew'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { CatGlyph, EditableLabel, EditableMoney, ListRow, ProgressBar, Row } from '@/components/ui'
@@ -19,12 +20,17 @@ interface LedgerRowProps {
   spent: number
   ytd: number
   annualLimit: number | null
+  /** Balance through the end of the previous month. 0 unless rollsOver. */
+  carried: number
+  rollsOver: boolean
   last?: boolean
   /** Omitted when the row has children — its budget is theirs, not its own. */
   onBudget?: (v: number) => void
   /** Present only on a savings leaf — types the transfer instead of showing derived spend. */
   onSpent?: (v: number) => void
   onAnnualLimit: (v: number) => void
+  /** Omitted on a savings row — that already accrues via contributed/annualLimit. */
+  onRollover?: (v: boolean) => void
   onRename: (v: string) => void
   onRemove: () => void
   /** Adds a "+" affordance — "add a line item to this category". */
@@ -49,10 +55,13 @@ export function LedgerRow({
   spent,
   ytd,
   annualLimit,
+  carried,
+  rollsOver,
   last,
   onBudget,
   onSpent,
   onAnnualLimit,
+  onRollover,
   onRename,
   onRemove,
   onAdd,
@@ -61,7 +70,8 @@ export function LedgerRow({
   onToggleExpand,
   indent,
 }: LedgerRowProps) {
-  const remaining = budget - spent
+  const available = carried + budget
+  const remaining = available - spent
   const over = remaining < -0.001
   const isSavings = annualLimit != null
 
@@ -87,8 +97,14 @@ export function LedgerRow({
             />
           )}
           <CatGlyph icon={icon} size={indent ? 28 : 32} tone={isSavings ? 'accent' : 'neutral'} />
-          <Box onClick={(e) => e.stopPropagation()}>
+          <Box onClick={(e) => e.stopPropagation()} sx={{ minWidth: 0 }}>
             <EditableLabel value={label} onChange={onRename} size={14} weight={500} />
+            {rollsOver && carried !== 0 && (
+              <Typography sx={{ ...tabularNums, fontSize: 11, color: 'text.disabled' }}>
+                {carried > 0 ? '+' : '−'}
+                {fmtDollars(Math.abs(carried))} carried
+              </Typography>
+            )}
           </Box>
         </Row>
 
@@ -118,7 +134,7 @@ export function LedgerRow({
             sx={{
               ...tabularNums,
               // Amber before red: "nearly out" is worth knowing a week early.
-              color: over ? brand.red[600] : remaining < budget * 0.12 ? brand.amber[700] : 'text.secondary',
+              color: over ? brand.red[600] : remaining < available * 0.12 ? brand.amber[700] : 'text.secondary',
             }}
           >
             {fmtSigned(remaining)}
@@ -126,6 +142,26 @@ export function LedgerRow({
         </Row>
 
         <Row gap={0.25} sx={{ minWidth: 28, justifyContent: 'center' }}>
+          {onRollover && (
+            <IconButton
+              size="small"
+              title={rollsOver ? 'Rolls over — unspent budget carries forward' : 'Rolls over'}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRollover(!rollsOver)
+              }}
+              sx={{
+                width: 24,
+                height: 24,
+                borderRadius: '6px',
+                color: rollsOver ? brand.teal[600] : 'text.disabled',
+                bgcolor: rollsOver ? brand.teal[50] : 'transparent',
+                '&:hover': { color: rollsOver ? brand.teal[700] : 'text.secondary', bgcolor: 'grey.100' },
+              }}
+            >
+              <AutorenewIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          )}
           {onAdd && (
             <IconButton
               size="small"

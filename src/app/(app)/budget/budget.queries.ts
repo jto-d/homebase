@@ -18,8 +18,10 @@ export const BudgetMonthDocument = graphql(`
         budget
         annualLimit
         isSavings
+        rollsOver
         spent
         ytd
+        carried
       }
       income {
         id
@@ -65,6 +67,12 @@ export const SetNodeAnnualLimitDocument = graphql(`
 export const SetNodeContributedDocument = graphql(`
   mutation SetNodeContributed($id: String!, $year: Int!, $month: Int!, $amount: Float!) {
     setNodeContributed(id: $id, year: $year, month: $month, amount: $amount)
+  }
+`)
+
+export const SetNodeRolloverDocument = graphql(`
+  mutation SetNodeRollover($id: String!, $rollsOver: Boolean!) {
+    setNodeRollover(id: $id, rollsOver: $rollsOver)
   }
 `)
 

@@ -41,6 +41,11 @@ export function parseDateOnly(input: string): Date {
   return date
 }
 
+/** Months since year 0 — the one number that makes two selections comparable. */
+export function monthOrdinal({ year, month }: MonthSel): number {
+  return year * 12 + (month - 1)
+}
+
 /**
  * The half-open UTC range from January 1 to the end of `month`, for a
  * year-to-date figure. Same UTC reasoning as `monthRange` — and sharper here,
@@ -80,8 +85,12 @@ export interface BudgetNodeData {
   annualLimit: number | null
   /// Inherited: true for a node flagged directly, or under one that is.
   isSavings: boolean
+  /// Not inherited, unlike isSavings — set per node.
+  rollsOver: boolean
   spent: number
   ytd: number
+  /// Balance through the end of the *previous* month. 0 unless rollsOver.
+  carried: number
 }
 
 export interface BudgetTreeNode extends BudgetNodeData {
@@ -122,6 +131,9 @@ export function buildBudgetTree(nodes: readonly BudgetNodeData[]): BudgetTreeNod
     if (node.children.length > 0) node.budget = sumMoney(node.children, (c) => c.budget)
     node.spent = roundCents(node.spent + sumMoney(node.children, (c) => c.spent))
     node.ytd = roundCents(node.ytd + sumMoney(node.children, (c) => c.ytd))
+    // Same asymmetry as spent: a node's own carried balance plus children's,
+    // never replaced — a category that grew line items keeps its history.
+    node.carried = roundCents(node.carried + sumMoney(node.children, (c) => c.carried))
     return node
   }
 

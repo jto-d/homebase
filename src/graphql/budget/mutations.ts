@@ -395,6 +395,30 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  /**
+   * Flip whether unspent budget on a node carries forward instead of
+   * evaporating at month end. Refused inside a savings subtree — that already
+   * accrues via `contributed`/`annualLimit`, and the two accruals together
+   * would be nonsense.
+   */
+  setNodeRollover: t.boolean({
+    args: { id: t.arg.string({ required: true }), rollsOver: t.arg.boolean({ required: true }) },
+    resolve: async (_root, { id, rollsOver }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      const nodes = await prisma.budgetNode.findMany({
+        where: { householdId },
+        select: { id: true, parentId: true, isSavings: true },
+      })
+      if (!nodes.some((n) => n.id === id)) throw new UserFacingError('Budget not found')
+      if (savingsNodeIds(nodes).has(id)) {
+        throw new UserFacingError('A savings category already accrues — it cannot also roll over')
+      }
+
+      await prisma.budgetNode.updateMany({ where: { id, householdId }, data: { rollsOver } })
+      return true
+    },
+  }),
+
   addIncomeSource: t.boolean({
     args: {
       ownerId: t.arg.string({ required: true }),
