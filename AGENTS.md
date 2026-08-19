@@ -14,7 +14,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 **Do NOT use git worktrees.** Work directly in this checkout. No `git worktree add`, no
 `EnterWorktree`. Work straight on `main`.
 
-**Do NOT push to `main`.** Commit freely, leave pushing to the user.
+**Do NOT create feature branches or PRs.** Commit directly on `main` and push there — the
+user has confirmed this explicitly. No `git checkout -b`, no `gh pr create`.
 
 ## What Homebase is
 
