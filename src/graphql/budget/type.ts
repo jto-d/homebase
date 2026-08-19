@@ -63,9 +63,8 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     spent: t.float(),
     /// January through the selected month. Zero unless `isSavings`.
     ytd: t.float(),
-    /// Balance through the end of the *previous* month: accrued budget minus
-    /// spend since the node started rolling over. Zero unless `rollsOver`. Can
-    /// go negative — overspending one month is a debt against the next.
+    /// Balance through the end of the *previous* month. Zero unless `rollsOver`;
+    /// can go negative — overspending one month is a debt against the next.
     carried: t.float(),
   }),
 })

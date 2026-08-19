@@ -131,8 +131,7 @@ export function buildBudgetTree(nodes: readonly BudgetNodeData[]): BudgetTreeNod
     if (node.children.length > 0) node.budget = sumMoney(node.children, (c) => c.budget)
     node.spent = roundCents(node.spent + sumMoney(node.children, (c) => c.spent))
     node.ytd = roundCents(node.ytd + sumMoney(node.children, (c) => c.ytd))
-    // Same asymmetry as spent: a node's own carried balance plus children's,
-    // never replaced — a category that grew line items keeps its history.
+    // Same own-plus-children rule as spent, for the same reason.
     node.carried = roundCents(node.carried + sumMoney(node.children, (c) => c.carried))
     return node
   }

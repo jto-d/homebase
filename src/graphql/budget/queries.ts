@@ -53,10 +53,9 @@ async function seedIfEmpty(householdId: string, ownerId: string): Promise<void> 
 }
 
 /**
- * Balance through the end of the month before `sel`, per rollsOver node —
- * accrued budget minus actual spend since the later of the household's
- * budget start and the node's own creation. Skipped entirely (no extra
- * queries) when nothing on the tree rolls over.
+ * Balance through the end of the month before `sel`, per rollsOver node:
+ * accrued budget minus spend since the later of the household's budget
+ * start and the node's own creation. No extra queries when nothing rolls over.
  */
 async function carriedBalances({
   householdId,
