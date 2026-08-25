@@ -24,14 +24,13 @@ export interface LedgerHandlers {
   onContributed: (id: string, value: number) => void
   onAnnualLimit: (id: string, value: number) => void
   onRollover: (id: string, value: boolean) => void
-  onManual: (id: string, value: boolean) => void
   onToggle: (id: string) => void
 }
 
 /**
  * The ledger card: groups, their categories, and any line items beneath those.
  *
- * There is no separate savings section or subscriptions section — a manual
+ * There is no separate savings section or subscriptions section — a savings
  * subtree renders through the same path as everything else, its rows just
  * carry a typed transfer instead of derived spend.
  */
@@ -46,18 +45,8 @@ export function BudgetLedger({
   collapsed: Record<string, boolean>
   handlers: LedgerHandlers
 }) {
-  const {
-    onAddChild,
-    onAddGroup,
-    onRename,
-    onDelete,
-    onBudget,
-    onContributed,
-    onAnnualLimit,
-    onRollover,
-    onManual,
-    onToggle,
-  } = handlers
+  const { onAddChild, onAddGroup, onRename, onDelete, onBudget, onContributed, onAnnualLimit, onRollover, onToggle } =
+    handlers
   const totalCarried = roots.reduce((sum, r) => sum + r.carried, 0)
 
   return (
@@ -96,15 +85,13 @@ export function BudgetLedger({
                     annualLimit={category.annualLimit}
                     carried={category.carried}
                     rollsOver={category.rollsOver}
-                    isManual={category.isManual}
                     // A category with line items no longer owns its number.
                     onBudget={hasLines ? undefined : (v) => onBudget(category.id, v)}
                     onSpent={
-                      category.isManual && !hasLines ? (v) => onContributed(category.id, v) : undefined
+                      category.isSavings && !hasLines ? (v) => onContributed(category.id, v) : undefined
                     }
                     onAnnualLimit={(v) => onAnnualLimit(category.id, v)}
-                    onRollover={category.isManual ? undefined : (v) => onRollover(category.id, v)}
-                    onManual={(v) => onManual(category.id, v)}
+                    onRollover={category.isSavings ? undefined : (v) => onRollover(category.id, v)}
                     onRename={(label) => onRename(category.id, label)}
                     onRemove={() =>
                       onDelete({ id: category.id, label: category.label, childCount: category.children.length })
@@ -129,12 +116,10 @@ export function BudgetLedger({
                           annualLimit={line.annualLimit}
                           carried={line.carried}
                           rollsOver={line.rollsOver}
-                          isManual={line.isManual}
                           onBudget={(v) => onBudget(line.id, v)}
-                          onSpent={line.isManual ? (v) => onContributed(line.id, v) : undefined}
+                          onSpent={line.isSavings ? (v) => onContributed(line.id, v) : undefined}
                           onAnnualLimit={(v) => onAnnualLimit(line.id, v)}
-                          onRollover={line.isManual ? undefined : (v) => onRollover(line.id, v)}
-                          onManual={(v) => onManual(line.id, v)}
+                          onRollover={line.isSavings ? undefined : (v) => onRollover(line.id, v)}
                           onRename={(label) => onRename(line.id, label)}
                           onRemove={() => onDelete({ id: line.id, label: line.label, childCount: 0 })}
                           indent

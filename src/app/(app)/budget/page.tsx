@@ -36,7 +36,6 @@ import {
   SetNodeAnnualLimitDocument,
   SetNodeBudgetDocument,
   SetNodeContributedDocument,
-  SetNodeManualDocument,
   SetNodeRolloverDocument,
 } from './budget.queries'
 
@@ -66,7 +65,6 @@ export default function BudgetPage() {
   const [, setAnnualLimit] = useMutation(SetNodeAnnualLimitDocument)
   const [, setContributed] = useMutation(SetNodeContributedDocument)
   const [, setRollover] = useMutation(SetNodeRolloverDocument)
-  const [, setManual] = useMutation(SetNodeManualDocument)
   const [, addIncome] = useMutation(AddIncomeSourceDocument)
   const [, renameIncome] = useMutation(RenameIncomeSourceDocument)
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
@@ -145,7 +143,6 @@ export default function BudgetPage() {
     onAnnualLimit: (id, annualLimit) =>
       run(() => setAnnualLimit({ id, annualLimit }), { key: `limit:${id}`, value: annualLimit }),
     onRollover: (id, rollsOver) => run(() => setRollover({ id, rollsOver })),
-    onManual: (id, isManual) => run(() => setManual({ id, isManual })),
     onToggle: (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] })),
   }
 

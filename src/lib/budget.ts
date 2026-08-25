@@ -84,8 +84,8 @@ export interface BudgetNodeData {
   budget: number
   annualLimit: number | null
   /// Inherited: true for a node flagged directly, or under one that is.
-  isManual: boolean
-  /// Not inherited, unlike isManual — set per node.
+  isSavings: boolean
+  /// Not inherited, unlike isSavings — set per node.
   rollsOver: boolean
   spent: number
   ytd: number
@@ -110,8 +110,8 @@ export interface BudgetTreeNode extends BudgetNodeData {
  * - **spent** — own splits *plus* children, never replaced. A node filed against
  *   before it grew children keeps that history instead of dropping it on the
  *   floor the moment someone adds a line item under it.
- * - **ytd** — rolls up the same way as spent, so a manual group totals its
- *   children's contributions. Zero on anything outside a manual subtree.
+ * - **ytd** — rolls up the same way as spent, so a savings group totals its
+ *   children's contributions. Zero on anything outside a savings subtree.
  */
 export function buildBudgetTree(nodes: readonly BudgetNodeData[]): BudgetTreeNode[] {
   const byId = new Map<string, BudgetTreeNode>(nodes.map((n) => [n.id, { ...n, children: [] }]))
@@ -174,16 +174,13 @@ export interface BudgetLeaf {
 }
 
 /**
- * Node ids inside a manual subtree — `isManual` set on a group or category,
- * inherited by everything under it. The single implementation of that
- * inheritance, read by `budgetLeaves` (to exclude them from filing) and
- * `buildBudgetTree`'s caller (to decide which rows get a typed transfer
- * instead of derived spend). Savings is the original case (see
- * `budgetDefaults.ts`), but any category can be flagged manual — Utilities,
- * say, where the bill doesn't arrive as a clean linked transaction.
+ * Node ids inside a savings subtree — `isSavings` set on a group, inherited by
+ * everything under it. The single implementation of that inheritance, read by
+ * `budgetLeaves` (to exclude them from filing) and `buildBudgetTree`'s caller
+ * (to decide which rows get a typed transfer instead of derived spend).
  */
-export function manualNodeIds(
-  nodes: readonly { id: string; parentId: string | null; isManual: boolean }[]
+export function savingsNodeIds(
+  nodes: readonly { id: string; parentId: string | null; isSavings: boolean }[]
 ): Set<string> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const result = new Set<string>()
@@ -191,7 +188,7 @@ export function manualNodeIds(
     // Two levels of ancestry at most, but bounded either way so a cycle from a
     // bad write can't spin here.
     for (let node = byId.get(start.id), hops = 0; node && hops < 8; hops++) {
-      if (node.isManual) {
+      if (node.isSavings) {
         result.add(start.id)
         break
       }
@@ -206,15 +203,15 @@ export function manualNodeIds(
  *
  * The single implementation of `id -> "Group › Category"`, shared by the
  * `budgetLeaves` query (build once, list) and the transaction-filing
- * mutations (build once, look a path back up by owner). Manual nodes are
+ * mutations (build once, look a path back up by owner). Savings nodes are
  * excluded — a transfer is typed directly onto the row, not filed like a charge.
  */
 export function budgetLeaves(
-  nodes: readonly { id: string; label: string; parentId: string | null; ownerId: string; isManual: boolean }[]
+  nodes: readonly { id: string; label: string; parentId: string | null; ownerId: string; isSavings: boolean }[]
 ): BudgetLeaf[] {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const hasChildren = new Set(nodes.map((n) => n.parentId).filter((id) => id != null))
-  const manual = manualNodeIds(nodes)
+  const savings = savingsNodeIds(nodes)
 
   const path = (id: string): string => {
     const parts: string[] = []
@@ -228,7 +225,7 @@ export function budgetLeaves(
   }
 
   return nodes
-    .filter((node) => !hasChildren.has(node.id) && !manual.has(node.id))
+    .filter((node) => !hasChildren.has(node.id) && !savings.has(node.id))
     .map((node) => ({ id: node.id, label: node.label, path: path(node.id), ownerId: node.ownerId }))
     .sort((a, b) => a.path.localeCompare(b.path))
 }

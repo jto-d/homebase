@@ -6,7 +6,6 @@ import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { CatGlyph, EditableLabel, EditableMoney, ListRow, ProgressBar, Row } from '@/components/ui'
 import { fmtDollars, fmtSigned } from '@/lib/format'
@@ -24,18 +23,14 @@ interface LedgerRowProps {
   /** Balance through the end of the previous month. 0 unless rollsOver. */
   carried: number
   rollsOver: boolean
-  /** Typed transfer instead of derived spend — savings is the original case, not the only one. */
-  isManual: boolean
   last?: boolean
   /** Omitted when the row has children — its budget is theirs, not its own. */
   onBudget?: (v: number) => void
-  /** Present only on a manual leaf — types the transfer instead of showing derived spend. */
+  /** Present only on a savings leaf — types the transfer instead of showing derived spend. */
   onSpent?: (v: number) => void
   onAnnualLimit: (v: number) => void
-  /** Omitted on a manual row — that already accrues via contributed/annualLimit. */
+  /** Omitted on a savings row — that already accrues via contributed/annualLimit. */
   onRollover?: (v: boolean) => void
-  /** Flips whether this row (and everything under it) types its spend instead of deriving it. */
-  onManual: (v: boolean) => void
   onRename: (v: string) => void
   onRemove: () => void
   /** Adds a "+" affordance — "add a line item to this category". */
@@ -62,13 +57,11 @@ export function LedgerRow({
   annualLimit,
   carried,
   rollsOver,
-  isManual,
   last,
   onBudget,
   onSpent,
   onAnnualLimit,
   onRollover,
-  onManual,
   onRename,
   onRemove,
   onAdd,
@@ -82,7 +75,7 @@ export function LedgerRow({
   const netSpent = spent - carried
   const remaining = budget - netSpent
   const over = remaining < -0.001
-  const hasAnnualLimit = annualLimit != null
+  const isSavings = annualLimit != null
 
   return (
     <ListRow
@@ -105,7 +98,7 @@ export function LedgerRow({
               }}
             />
           )}
-          <CatGlyph icon={icon} size={indent ? 28 : 32} tone={isManual ? 'accent' : 'neutral'} />
+          <CatGlyph icon={icon} size={indent ? 28 : 32} tone={isSavings ? 'accent' : 'neutral'} />
           <Box onClick={(e) => e.stopPropagation()} sx={{ minWidth: 0 }}>
             <EditableLabel value={label} onChange={onRename} size={14} weight={500} />
             {rollsOver && carried !== 0 && (
@@ -171,24 +164,6 @@ export function LedgerRow({
               <AutorenewIcon sx={{ fontSize: 15 }} />
             </IconButton>
           )}
-          <IconButton
-            size="small"
-            title={isManual ? 'Manual — type the amount instead of tracking transactions' : 'Type the amount instead of tracking transactions'}
-            onClick={(e) => {
-              e.stopPropagation()
-              onManual(!isManual)
-            }}
-            sx={{
-              width: 24,
-              height: 24,
-              borderRadius: '6px',
-              color: isManual ? brand.teal[600] : 'text.disabled',
-              bgcolor: isManual ? brand.teal[50] : 'transparent',
-              '&:hover': { color: isManual ? brand.teal[700] : 'text.secondary', bgcolor: 'grey.100' },
-            }}
-          >
-            <EditOutlinedIcon sx={{ fontSize: 14 }} />
-          </IconButton>
           {onAdd && (
             <IconButton
               size="small"
@@ -228,7 +203,7 @@ export function LedgerRow({
         </Row>
       </Row>
 
-      {hasAnnualLimit && <AnnualLimitBar ytd={ytd} annualLimit={annualLimit} onAnnualLimit={onAnnualLimit} />}
+      {isSavings && <AnnualLimitBar ytd={ytd} annualLimit={annualLimit} onAnnualLimit={onAnnualLimit} />}
     </ListRow>
   )
 }

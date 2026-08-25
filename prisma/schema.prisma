@@ -176,19 +176,17 @@ model BudgetNode {
   position    Int
   /// The rolling default, used for any month with no BudgetNodeMonth override.
   budget      Decimal  @default(0) @db.Decimal(10, 2)
-  /// Set = draws a year-to-date bar against the limit. There is no
-  /// SavingsAccount model: savings is a shape, not a table.
+  /// Set = this is a savings node, which draws a year-to-date bar against the
+  /// limit. There is no SavingsAccount model: savings is a shape, not a table.
   annualLimit Decimal? @db.Decimal(10, 2)
-  /// Marks a manual subtree: set on a group or category, descendants inherit
-  /// it (see `manualNodeIds`). A manual node's spend is a typed transfer, not
-  /// derived from transactions, and it drops out of `budgetLeaves` — nothing
-  /// can be filed into it. Savings is the original case, but any category can
-  /// be flagged manual (Utilities, say, when the bill isn't a clean linked
-  /// transaction).
-  isManual    Boolean  @default(false)
+  /// Marks a savings subtree: set on a group, descendants inherit it (see
+  /// `savingsNodeIds`). A savings node's spend is a typed transfer, not derived
+  /// from transactions, and it drops out of `budgetLeaves` — nothing can be filed
+  /// into it.
+  isSavings   Boolean  @default(false)
   /// Unspent budget accrues forward instead of evaporating at month end — for
   /// lumpy categories (travel, gifts) that sit near zero then take one big hit.
-  /// Unlike `isManual` this is NOT inherited: it is set per node.
+  /// Unlike `isSavings` this is NOT inherited: it is set per node.
   rollsOver   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
@@ -222,9 +220,9 @@ model BudgetNodeMonth {
   /// Nullable so a contribution-only write doesn't freeze this month's budget at
   /// whatever the rolling default happened to be.
   budget      Decimal? @db.Decimal(10, 2)
-  /// A manual node's manually entered transfer for this month. Only meaningful
-  /// on a manual node, where it *replaces* derived spend rather than adding to
-  /// it — see `BudgetNode.isManual`.
+  /// A savings node's manually entered transfer for this month. Only meaningful
+  /// on a savings node, where it *replaces* derived spend rather than adding to
+  /// it — see `BudgetNode.isSavings`.
   contributed Decimal? @db.Decimal(10, 2)
 
   @@unique([nodeId, year, month])

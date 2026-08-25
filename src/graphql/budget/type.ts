@@ -47,21 +47,21 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     /// children — that one is the sum of its children (see `buildBudgetTree`).
     budget: t.float(),
     /// Set = draws a year-to-date bar against this limit. Only meaningful on a
-    /// manual node.
+    /// savings node.
     annualLimit: t.float({ nullable: true }),
     /// Inherited: true for a node flagged directly, or under one that is. A
-    /// manual node can't be filed into, and its spend/ytd below are typed
+    /// savings node can't be filed into, and its spend/ytd below are typed
     /// transfers rather than derived from transactions.
-    isManual: t.boolean(),
+    isSavings: t.boolean(),
     /// Unspent budget accrues forward instead of evaporating at month end. Not
-    /// inherited, unlike `isManual` — set per node.
+    /// inherited, unlike `isSavings` — set per node.
     rollsOver: t.boolean(),
-    /// This node's *own* figure for the month: splits, unless `isManual`, in
+    /// This node's *own* figure for the month: splits, unless `isSavings`, in
     /// which case it's the typed transfer. Children are added on top by the
     /// client, so a node filed/contributed to before it grew children keeps its
     /// history.
     spent: t.float(),
-    /// January through the selected month. Zero unless `isManual`.
+    /// January through the selected month. Zero unless `isSavings`.
     ytd: t.float(),
     /// Balance through the end of the *previous* month. Zero unless `rollsOver`;
     /// can go negative — overspending one month is a debt against the next.

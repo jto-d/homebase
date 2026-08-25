@@ -17,7 +17,7 @@ export const BudgetMonthDocument = graphql(`
         position
         budget
         annualLimit
-        isManual
+        isSavings
         rollsOver
         spent
         ytd
@@ -73,12 +73,6 @@ export const SetNodeContributedDocument = graphql(`
 export const SetNodeRolloverDocument = graphql(`
   mutation SetNodeRollover($id: String!, $rollsOver: Boolean!) {
     setNodeRollover(id: $id, rollsOver: $rollsOver)
-  }
-`)
-
-export const SetNodeManualDocument = graphql(`
-  mutation SetNodeManual($id: String!, $isManual: Boolean!) {
-    setNodeManual(id: $id, isManual: $isManual)
   }
 `)
 
