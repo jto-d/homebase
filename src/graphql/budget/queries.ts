@@ -2,7 +2,7 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { BudgetLeafPayload, BudgetMonthPayload } from './type'
 import { prisma } from '@/lib/prisma'
-import { monthRange, monthOrdinal, roundCents, budgetLeaves, savingsNodeIds } from '@/lib/budget'
+import { monthRange, monthOrdinal, roundCents, budgetLeaves, manualNodeIds } from '@/lib/budget'
 import { DEFAULT_GROUPS, DEFAULT_INCOME } from '@/lib/budgetDefaults'
 import { UserFacingError } from '@/lib/errors'
 
@@ -30,7 +30,7 @@ async function seedIfEmpty(householdId: string, ownerId: string): Promise<void> 
           label: group.label,
           icon: group.icon,
           position,
-          isSavings: group.isSavings ?? false,
+          isManual: group.isManual ?? false,
           children: {
             create: group.categories.map((category, childPosition) => ({
               householdId,
@@ -193,12 +193,12 @@ builder.queryFields((t) => ({
 
       const spentBy = new Map(monthSpend.map((row) => [row.budgetId, row._sum.amount]))
       const contributedYtdBy = new Map(ytdContributed.map((row) => [row.nodeId, row._sum.contributed]))
-      const savings = savingsNodeIds(nodes)
+      const manual = manualNodeIds(nodes)
       const carriedByNode = await carriedBalances({ householdId, ownerId, sel: { year, month }, nodes, household })
 
       return {
         nodes: nodes.map((node) => {
-          const isSavingsNode = savings.has(node.id)
+          const isManualNode = manual.has(node.id)
           return {
             id: node.id,
             parentId: node.parentId,
@@ -208,13 +208,13 @@ builder.queryFields((t) => ({
             // The month override wins; absent, the rolling default applies.
             budget: (node.months[0]?.budget ?? node.budget).toNumber(),
             annualLimit: node.annualLimit?.toNumber() ?? null,
-            isSavings: isSavingsNode,
+            isManual: isManualNode,
             rollsOver: node.rollsOver,
-            // Savings: the typed transfer for this month. Everything else: splits.
-            spent: isSavingsNode
+            // Manual: the typed transfer for this month. Everything else: splits.
+            spent: isManualNode
               ? (node.months[0]?.contributed?.toNumber() ?? 0)
               : (spentBy.get(node.id)?.toNumber() ?? 0),
-            ytd: isSavingsNode ? (contributedYtdBy.get(node.id)?.toNumber() ?? 0) : 0,
+            ytd: isManualNode ? (contributedYtdBy.get(node.id)?.toNumber() ?? 0) : 0,
             carried: carriedByNode.get(node.id) ?? 0,
           }
         }),
@@ -243,7 +243,7 @@ builder.queryFields((t) => ({
       const { householdId } = requireAuth(ctx)
       const nodes = await prisma.budgetNode.findMany({
         where: { householdId },
-        select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+        select: { id: true, label: true, parentId: true, ownerId: true, isManual: true },
         orderBy: { position: 'asc' },
       })
       return budgetLeaves(nodes)

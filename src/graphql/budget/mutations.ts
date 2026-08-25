@@ -7,7 +7,7 @@ import {
   replaceSplits,
   validateSplits,
   budgetLeaves,
-  savingsNodeIds,
+  manualNodeIds,
   toCents,
   type SplitInput,
   type BudgetLeaf,
@@ -31,16 +31,16 @@ async function assertMember(householdId: string, userId: string): Promise<void> 
 }
 
 /**
- * Splits may only target leaves outside a savings subtree. A parent's spend is
+ * Splits may only target leaves outside a manual subtree. A parent's spend is
  * the sum of its children, so filing against one would count the money twice;
- * a savings node's spend is a typed transfer, not something a transaction can
+ * a manual node's spend is a typed transfer, not something a transaction can
  * add to. Reuses `budgetLeaves` so "filable" has one definition.
  */
 async function assertBudgets(householdId: string, budgetIds: readonly string[]): Promise<void> {
   if (budgetIds.length === 0) return
   const nodes = await prisma.budgetNode.findMany({
     where: { householdId },
-    select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+    select: { id: true, label: true, parentId: true, ownerId: true, isManual: true },
   })
   const filable = new Set(budgetLeaves(nodes).map((l) => l.id))
   if (!budgetIds.every((id) => filable.has(id))) {
@@ -82,7 +82,7 @@ async function refileTransaction(
 
   const nodes = await prisma.budgetNode.findMany({
     where: { householdId },
-    select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+    select: { id: true, label: true, parentId: true, ownerId: true, isManual: true },
   })
   const leaves: BudgetLeaf[] = budgetLeaves(nodes)
   const findLeaf = (ownerId: string) => leaves.find((l) => l.ownerId === ownerId && l.path === path)
@@ -134,7 +134,7 @@ interface CopyNode {
   position: number
   budget: number
   annualLimit: number | null
-  isSavings: boolean
+  isManual: boolean
 }
 
 /** Where the copy lands, and which month's figures it carries. */
@@ -160,7 +160,7 @@ interface CopyData {
   position: number
   budget: number
   annualLimit: number | null
-  isSavings: boolean
+  isManual: boolean
   months: { create: { year: number; month: number; budget: number } }
   children: { create: CopyData[] }
 }
@@ -176,7 +176,7 @@ function copyNode(node: CopyNode, byParent: Map<string | null, CopyNode[]>, into
     position: node.position,
     budget: node.budget,
     annualLimit: node.annualLimit,
-    isSavings: node.isSavings,
+    isManual: node.isManual,
     // Both the override and the rolling default, like setNodeBudget: this month
     // is what was copied, and the months after it start from the same figure.
     months: { create: { year: into.year, month: into.month, budget: node.budget } },
@@ -330,7 +330,7 @@ builder.mutationFields((t) => ({
   }),
 
   /**
-   * A savings node's transfer for one month — the number the YTD bar sums.
+   * A manual node's transfer for one month — the number the YTD bar sums.
    *
    * Unlike `setNodeBudget` this writes only the month row: a transfer is a fact
    * about that month, not a standing figure the next month starts from.
@@ -349,10 +349,10 @@ builder.mutationFields((t) => ({
 
       const nodes = await prisma.budgetNode.findMany({
         where: { householdId },
-        select: { id: true, parentId: true, isSavings: true },
+        select: { id: true, parentId: true, isManual: true },
       })
       if (!nodes.some((n) => n.id === id)) throw new UserFacingError('Budget not found')
-      if (!savingsNodeIds(nodes).has(id)) throw new UserFacingError('This is not a savings category')
+      if (!manualNodeIds(nodes).has(id)) throw new UserFacingError('This is not a manual category')
       if (nodes.some((n) => n.parentId === id)) {
         throw new UserFacingError('This is calculated from its line items')
       }
@@ -367,20 +367,23 @@ builder.mutationFields((t) => ({
   }),
 
   /**
-   * Flip whether a node (and everything under it) is a savings subtree.
+   * Flip whether a node (and everything under it) is a manual subtree — its
+   * spend is a typed transfer instead of derived from linked transactions.
+   * Savings is the original case, but any category can be flagged manual
+   * (Utilities, say, when the bill isn't a clean linked transaction).
    *
    * Turning it on is blocked while transactions are filed under it: the subtree
    * drops out of `budgetLeaves` the moment this is set, and that spend would
    * otherwise vanish from the ledger with no way to see it again.
    */
-  setNodeSavings: t.boolean({
-    args: { id: t.arg.string({ required: true }), isSavings: t.arg.boolean({ required: true }) },
-    resolve: async (_root, { id, isSavings }, ctx) => {
+  setNodeManual: t.boolean({
+    args: { id: t.arg.string({ required: true }), isManual: t.arg.boolean({ required: true }) },
+    resolve: async (_root, { id, isManual }, ctx) => {
       const { householdId } = requireAuth(ctx)
       const exists = await prisma.budgetNode.count({ where: { id, householdId } })
       if (exists === 0) throw new UserFacingError('Budget not found')
 
-      if (isSavings) {
+      if (isManual) {
         const ids = await subtreeIds(householdId, id)
         const filed = await prisma.transactionSplit.count({ where: { budgetId: { in: ids } } })
         if (filed > 0) {
@@ -390,14 +393,14 @@ builder.mutationFields((t) => ({
         }
       }
 
-      await prisma.budgetNode.updateMany({ where: { id, householdId }, data: { isSavings } })
+      await prisma.budgetNode.updateMany({ where: { id, householdId }, data: { isManual } })
       return true
     },
   }),
 
   /**
    * Flip whether unspent budget on a node carries forward instead of
-   * evaporating at month end. Refused inside a savings subtree — that already
+   * evaporating at month end. Refused inside a manual subtree — that already
    * accrues via `contributed`/`annualLimit`, and the two accruals together
    * would be nonsense.
    */
@@ -407,11 +410,11 @@ builder.mutationFields((t) => ({
       const { householdId } = requireAuth(ctx)
       const nodes = await prisma.budgetNode.findMany({
         where: { householdId },
-        select: { id: true, parentId: true, isSavings: true },
+        select: { id: true, parentId: true, isManual: true },
       })
       if (!nodes.some((n) => n.id === id)) throw new UserFacingError('Budget not found')
-      if (savingsNodeIds(nodes).has(id)) {
-        throw new UserFacingError('A savings category already accrues — it cannot also roll over')
+      if (manualNodeIds(nodes).has(id)) {
+        throw new UserFacingError('A manual category already accrues — it cannot also roll over')
       }
 
       await prisma.budgetNode.updateMany({ where: { id, householdId }, data: { rollsOver } })
@@ -545,7 +548,7 @@ builder.mutationFields((t) => ({
           position: node.position,
           budget: (node.months[0]?.budget ?? node.budget).toNumber(),
           annualLimit: node.annualLimit?.toNumber() ?? null,
-          isSavings: node.isSavings,
+          isManual: node.isManual,
         })
         byParent.set(node.parentId, siblings)
       }
@@ -763,7 +766,7 @@ builder.mutationFields((t) => ({
 
       const nodes = await prisma.budgetNode.findMany({
         where: { householdId },
-        select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+        select: { id: true, label: true, parentId: true, ownerId: true, isManual: true },
       })
       const currentLeaf = budgetLeaves(nodes).find((l) => l.id === txn.splits[0]!.budgetId)
       if (!currentLeaf) throw new UserFacingError('Budget not found')
@@ -798,7 +801,7 @@ builder.mutationFields((t) => ({
 
       const nodes = await prisma.budgetNode.findMany({
         where: { householdId },
-        select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+        select: { id: true, label: true, parentId: true, ownerId: true, isManual: true },
       })
       const currentLeaf = budgetLeaves(nodes).find((l) => l.id === txn.splits[0]!.budgetId)
       if (!currentLeaf) throw new UserFacingError('Budget not found')
