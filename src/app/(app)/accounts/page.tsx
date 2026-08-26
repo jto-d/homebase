@@ -13,8 +13,9 @@ import RefreshIcon from '@mui/icons-material/RefreshOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined'
 import { MemberAvatar, type Member } from '@/components/MemberAvatar'
 import { LinkBankDialog } from '@/components/LinkBankDialog'
-import { CatGlyph, Eyebrow, ListRow, Row, Stack, Stat, SurfaceCard } from '@/components/ui'
+import { CatGlyph, Eyebrow, ListRow, Row, Segmented, Stack, Stat, SurfaceCard } from '@/components/ui'
 import { fmtDollars, fmtMoney } from '@/lib/format'
+import { memberLabel } from '@/lib/members'
 import { tabularNums, truncate } from '@/lib/sx'
 import { useHousehold } from '../household-context'
 import { AccountsDocument, CreateInvestmentLinkTokenDocument, LinkInvestmentAccountDocument } from './accounts.queries'
@@ -24,12 +25,15 @@ type Account = AccountsQuery['accounts'][number]
 
 type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
 
+const HOUSEHOLD = 'household'
+
 export default function AccountsPage() {
-  const { me, members } = useHousehold()
+  const { me, partner, members } = useHousehold()
   const [error, setError] = useState<string | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [closed, setClosed] = useState<Record<string, boolean>>({})
+  const [view, setView] = useState(HOUSEHOLD)
 
   const [{ data, fetching }, refetch] = useQuery({ query: AccountsDocument })
   const [, createLinkToken] = useMutation(CreateInvestmentLinkTokenDocument)
@@ -48,7 +52,8 @@ export default function AccountsPage() {
     return true
   }
 
-  const accounts = data?.accounts ?? []
+  const all = data?.accounts ?? []
+  const accounts = view === HOUSEHOLD ? all : all.filter((a) => a.ownerId === view || a.ownerId === null)
   const cash = accounts.filter((a) => a.kind === 'cash')
   const investments = accounts.filter((a) => a.kind === 'investment')
   const total = accounts.reduce((sum, a) => sum + a.balance, 0)
@@ -108,6 +113,17 @@ export default function AccountsPage() {
       <Row justify="between" align="end">
         <Stat hero label="Total" value={fmtDollars(total)} />
         <Row gap={1.5}>
+          {partner && (
+            <Segmented
+              value={view}
+              onChange={setView}
+              options={[
+                { value: HOUSEHOLD, label: 'Household' },
+                { value: me.id, label: memberLabel(me), icon: <MemberAvatar member={me} size={18} /> },
+                { value: partner.id, label: memberLabel(partner), icon: <MemberAvatar member={partner} size={18} /> },
+              ]}
+            />
+          )}
           <Button variant="outlined" startIcon={<RefreshIcon />} onClick={reload}>
             Refresh
           </Button>
@@ -123,12 +139,18 @@ export default function AccountsPage() {
         <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : accounts.length === 0 ? (
+      ) : all.length === 0 ? (
         <Stack align="center" gap={1.5} sx={{ py: 8, textAlign: 'center' }}>
           <Typography sx={{ color: 'text.secondary' }}>No accounts linked yet.</Typography>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setLinkOpen(true)}>
             Link account
           </Button>
+        </Stack>
+      ) : accounts.length === 0 ? (
+        <Stack align="center" gap={1.5} sx={{ py: 8, textAlign: 'center' }}>
+          <Typography sx={{ color: 'text.secondary' }}>
+            No accounts for {view === me.id ? memberLabel(me) : partner ? memberLabel(partner) : ''}.
+          </Typography>
         </Stack>
       ) : (
         <SurfaceCard>
