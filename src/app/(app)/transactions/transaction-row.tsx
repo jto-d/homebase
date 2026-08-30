@@ -73,11 +73,12 @@ export function TransactionRow({
   last,
 }: TransactionRowProps) {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
-  const [splitMenuAnchor, setSplitMenuAnchor] = useState<HTMLElement | null>(null)
   const [kebabAnchor, setKebabAnchor] = useState<HTMLElement | null>(null)
   const hasCategory = currentPath != null
   const original = txn.originalAmount ?? txn.amount
   const edited = toCents(txn.amount) !== toCents(original)
+  const canCustomSplit = hasCategory && counterparty != null && txn.shared == null
+  const showKebab = edited || canCustomSplit
 
   return (
     <ListRow last={last} hover sx={{ gap: 2 }}>
@@ -148,31 +149,12 @@ export function TransactionRow({
           <>
             <Box
               component="button"
-              onClick={(e) => setSplitMenuAnchor(e.currentTarget)}
+              onClick={() => onSetShared(true)}
               sx={{ ...chipBase, px: '11px', py: '5px', borderColor: 'divider', bgcolor: '#fff', color: 'text.secondary', fontWeight: 500 }}
             >
               <AddIcon sx={{ fontSize: 13 }} />
               Split 50/50
-              <ExpandMoreIcon sx={{ fontSize: 14, opacity: 0.7 }} />
             </Box>
-            <Menu anchorEl={splitMenuAnchor} open={splitMenuAnchor != null} onClose={() => setSplitMenuAnchor(null)}>
-              <MenuItem
-                onClick={() => {
-                  onSetShared(true)
-                  setSplitMenuAnchor(null)
-                }}
-              >
-                50/50
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  onOpenSplit()
-                  setSplitMenuAnchor(null)
-                }}
-              >
-                Custom…
-              </MenuItem>
-            </Menu>
             <Box
               component="button"
               onClick={() => onSetShared(false)}
@@ -213,7 +195,7 @@ export function TransactionRow({
         <EditableMoney value={txn.amount} onChange={onSetAmount} precise weight={600} />
       </Box>
 
-      {edited ? (
+      {showKebab ? (
         <>
           <IconButton
             size="small"
@@ -223,14 +205,26 @@ export function TransactionRow({
             <MoreHorizIcon fontSize="small" />
           </IconButton>
           <Menu anchorEl={kebabAnchor} open={kebabAnchor != null} onClose={() => setKebabAnchor(null)}>
-            <MenuItem
-              onClick={() => {
-                onSetAmount(original)
-                setKebabAnchor(null)
-              }}
-            >
-              Revert to original
-            </MenuItem>
+            {canCustomSplit && (
+              <MenuItem
+                onClick={() => {
+                  onOpenSplit()
+                  setKebabAnchor(null)
+                }}
+              >
+                Custom split
+              </MenuItem>
+            )}
+            {edited && (
+              <MenuItem
+                onClick={() => {
+                  onSetAmount(original)
+                  setKebabAnchor(null)
+                }}
+              >
+                Revert to original
+              </MenuItem>
+            )}
           </Menu>
         </>
       ) : (
