@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@urql/next'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -28,6 +28,7 @@ import {
   SetTransactionSplitAmountDocument,
   SyncPlaidTransactionsDocument,
   TransactionsMonthDocument,
+  UpdateTransactionDocument,
 } from './transactions.queries'
 import { AddTransactionDialog } from './add-transaction-dialog'
 import { LinkBankDialog } from '@/components/LinkBankDialog'
@@ -62,12 +63,21 @@ export default function TransactionsPage() {
   const [syncing, setSyncing] = useState(false)
   const [splitFor, setSplitFor] = useState<Txn | null>(null)
   const [closed, setClosed] = useState<Record<string, boolean>>({ Filed: true })
+  const [amountOverrides, setAmountOverrides] = useState<Record<string, number>>({})
 
   const [{ data, fetching }, refetch] = useQuery({ query: TransactionsMonthDocument, variables: sel })
+  const seen = useRef(data)
+  useEffect(() => {
+    if (data !== seen.current) {
+      seen.current = data
+      setAmountOverrides({})
+    }
+  }, [data])
   const [, createTransaction] = useMutation(CreateTransactionDocument)
   const [, setCategory] = useMutation(SetTransactionCategoryDocument)
   const [, setShared] = useMutation(SetTransactionSharedDocument)
   const [, setSplitAmount] = useMutation(SetTransactionSplitAmountDocument)
+  const [, updateTransaction] = useMutation(UpdateTransactionDocument)
   const [, deleteTransaction] = useMutation(DeleteTransactionDocument)
   const [, createLinkToken] = useMutation(CreatePlaidLinkTokenDocument)
   const [, linkPlaidItem] = useMutation(LinkPlaidItemDocument)
@@ -140,6 +150,13 @@ export default function TransactionsPage() {
     )
   }
 
+  async function handleAmount(id: string, amount: number) {
+    setAmountOverrides((prev) => ({ ...prev, [id]: amount }))
+    const result = await updateTransaction({ id, amount })
+    if (report(result)) reload()
+    else setAmountOverrides(({ [id]: _, ...rest }) => rest)
+  }
+
   async function run(fire: () => Promise<MutationResult>) {
     if (report(await fire())) reload()
   }
@@ -202,7 +219,11 @@ export default function TransactionsPage() {
           {items.map((txn, i) => (
             <TransactionRow
               key={txn.id}
-              txn={txn}
+              txn={{
+                ...txn,
+                amount: amountOverrides[txn.id] ?? txn.amount,
+                originalAmount: txn.originalAmount ?? (amountOverrides[txn.id] != null ? txn.amount : null),
+              }}
               payerLabel={payerLabel(txn)}
               accountLabel={accountLabel(txn)}
               counterparty={counterpartyFor(txn)}
@@ -211,6 +232,7 @@ export default function TransactionsPage() {
               categoryGroups={categoryGroups}
               onSetCategory={(path) => run(() => setCategory({ id: txn.id, path }))}
               onSetShared={(shared) => run(() => setShared({ id: txn.id, shared }))}
+              onSetAmount={(amount) => handleAmount(txn.id, amount)}
               onOpenSplit={() => setSplitFor(txn)}
               onDelete={() => run(() => deleteTransaction({ id: txn.id }))}
               last={i === items.length - 1}

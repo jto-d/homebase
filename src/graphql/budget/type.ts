@@ -6,6 +6,10 @@ builder.prismaObject('Transaction', {
     merchant: t.exposeString('merchant'),
     date: t.string({ resolve: (txn) => txn.date.toISOString() }),
     amount: t.float({ resolve: (txn) => txn.amount.toNumber() }),
+    originalAmount: t.float({
+      nullable: true,
+      resolve: (txn) => txn.originalAmount?.toNumber() ?? null,
+    }),
     note: t.exposeString('note', { nullable: true }),
     /// Who paid. null = a joint account.
     ownerId: t.exposeString('ownerId', { nullable: true }),

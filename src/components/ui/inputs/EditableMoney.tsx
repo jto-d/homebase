@@ -5,7 +5,7 @@ import Box from '@mui/material/Box'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { brand } from '@/lib/theme'
-import { fmtDollars } from '@/lib/format'
+import { fmtDollars, fmtMoney } from '@/lib/format'
 import { roundCents } from '@/lib/budget'
 
 interface EditableMoneyProps {
@@ -13,6 +13,8 @@ interface EditableMoneyProps {
   onChange: (v: number) => void
   /** Render `0` as an em dash instead of `$0`. */
   muted?: boolean
+  /** Exact cents (`$12.34`) instead of the budget ledger's whole dollars. */
+  precise?: boolean
   color?: string
   size?: number
   weight?: number
@@ -24,7 +26,7 @@ interface EditableMoneyProps {
  * Clamps at zero, but that is a convenience, not the rule — the resolvers reject
  * negatives too, because the API is not the UI.
  */
-export function EditableMoney({ value, onChange, muted, color, size = 14, weight = 500 }: EditableMoneyProps) {
+export function EditableMoney({ value, onChange, muted, precise, color, size = 14, weight = 500 }: EditableMoneyProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
 
@@ -108,7 +110,7 @@ export function EditableMoney({ value, onChange, muted, color, size = 14, weight
         transition: 'background 0.15s ease',
       }}
     >
-      {value === 0 && muted ? '—' : fmtDollars(value)}
+      {value === 0 && muted ? '—' : precise ? fmtMoney(value) : fmtDollars(value)}
     </Box>
   )
 }

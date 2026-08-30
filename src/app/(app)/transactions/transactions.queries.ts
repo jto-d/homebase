@@ -24,6 +24,7 @@ export const TransactionsMonthDocument = graphql(`
       merchant
       date
       amount
+      originalAmount
       note
       ownerId
       shared
@@ -69,6 +70,16 @@ export const SetTransactionSharedDocument = graphql(`
 export const SetTransactionSplitAmountDocument = graphql(`
   mutation SetTransactionSplitAmount($id: String!, $partnerAmount: Float!) {
     setTransactionSplitAmount(id: $id, partnerAmount: $partnerAmount)
+  }
+`)
+
+export const UpdateTransactionDocument = graphql(`
+  mutation UpdateTransaction($id: String!, $amount: Float) {
+    updateTransaction(id: $id, amount: $amount) {
+      id
+      amount
+      originalAmount
+    }
   }
 `)
 

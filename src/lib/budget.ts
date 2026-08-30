@@ -273,6 +273,30 @@ export function validateSplits(amount: number, splits: readonly SplitInput[]): S
 }
 
 /**
+ * Re-portion existing splits so they still sum to `newAmount`. One split takes
+ * the whole new total; more than one keeps each share's ratio, with leftover
+ * cents on the last row so the sum invariant holds.
+ */
+export function scaleSplits(
+  oldAmount: number,
+  newAmount: number,
+  splits: readonly SplitInput[]
+): SplitInput[] {
+  if (splits.length === 0) return []
+  if (splits.length === 1) return [{ budgetId: splits[0]!.budgetId, amount: roundCents(newAmount) }]
+
+  const oldCents = toCents(oldAmount)
+  const newCents = toCents(newAmount)
+  let remaining = newCents
+  return splits.map((s, i) => {
+    if (i === splits.length - 1) return { budgetId: s.budgetId, amount: remaining / 100 }
+    const share = oldCents === 0 ? 0 : Math.round(toCents(s.amount) * newCents / oldCents)
+    remaining -= share
+    return { budgetId: s.budgetId, amount: share / 100 }
+  })
+}
+
+/**
  * Replace a transaction's splits wholesale. Replace-all is the only write mode —
  * there is no add/edit/remove of an individual split, which is what keeps the
  * sum invariant checkable in one place.

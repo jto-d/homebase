@@ -5,6 +5,7 @@ import { UserFacingError } from '@/lib/errors'
 import {
   parseDateOnly,
   replaceSplits,
+  scaleSplits,
   validateSplits,
   budgetLeaves,
   savingsNodeIds,
@@ -659,9 +660,9 @@ builder.mutationFields((t) => ({
   }),
 
   /**
-   * Changing the amount unfiles the transaction: the existing splits summed to
-   * the old total, and there is no honest way to guess how the difference should
-   * be shared out. The UI warns before calling this.
+   * Changing the amount keeps any splits, scaled to the new total, so budget
+   * spend and the split ratio stay in proportion. `originalAmount` is stamped
+   * on the first edit and cleared when the amount is set back to it.
    */
   updateTransaction: t.prismaField({
     type: 'Transaction',
@@ -677,7 +678,12 @@ builder.mutationFields((t) => ({
       const { householdId } = requireAuth(ctx)
       const existing = await prisma.transaction.findFirst({
         where: { id: args.id, householdId },
-        select: { id: true, amount: true },
+        select: {
+          id: true,
+          amount: true,
+          originalAmount: true,
+          splits: { select: { budgetId: true, amount: true } },
+        },
       })
       if (!existing) throw new UserFacingError('Transaction not found')
 
@@ -687,17 +693,41 @@ builder.mutationFields((t) => ({
       if (args.ownerId) await assertMember(householdId, args.ownerId)
 
       const amountChanged = args.amount != null && !existing.amount.equals(args.amount)
+      const nextAmount = args.amount
+      const originalAmount = amountChanged && nextAmount != null
+        ? (existing.originalAmount ?? existing.amount).equals(nextAmount)
+          ? null
+          : (existing.originalAmount ?? existing.amount)
+        : undefined
+
+      let nextSplits: SplitInput[] | undefined
+      let unfile = false
+      if (amountChanged && nextAmount != null && existing.splits.length > 0) {
+        const scaled = scaleSplits(
+          existing.amount.toNumber(),
+          nextAmount,
+          existing.splits.map((s) => ({ budgetId: s.budgetId, amount: s.amount.toNumber() }))
+        )
+        const decision = validateSplits(nextAmount, scaled)
+        // ponytail: unfile if scaling would break the sum invariant (e.g. a 2¢
+        // total with two splits). Revisit if tiny-amount edits become a thing.
+        if (decision.ok) nextSplits = scaled
+        else unfile = true
+      }
 
       await prisma.$transaction(async (tx) => {
-        if (amountChanged) await replaceSplits(tx, existing.id, [])
+        if (nextSplits) await replaceSplits(tx, existing.id, nextSplits)
+        if (unfile) await replaceSplits(tx, existing.id, [])
         await tx.transaction.update({
           where: { id: existing.id },
           data: {
             ...(merchant ? { merchant } : {}),
             ...(args.date != null ? { date: parseDateOnly(args.date) } : {}),
             ...(args.amount != null ? { amount: args.amount } : {}),
+            ...(originalAmount !== undefined ? { originalAmount } : {}),
             ...(args.note !== undefined ? { note: args.note?.trim() || null } : {}),
             ...(args.ownerId !== undefined ? { ownerId: args.ownerId ?? null } : {}),
+            ...(unfile ? { shared: null } : {}),
           },
         })
       })

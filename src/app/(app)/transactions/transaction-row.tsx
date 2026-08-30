@@ -10,12 +10,13 @@ import CheckIcon from '@mui/icons-material/CheckOutlined'
 import AddIcon from '@mui/icons-material/AddOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined'
-import { ListRow, Row, Stack } from '@/components/ui'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
+import { EditableMoney, ListRow, Row, Stack } from '@/components/ui'
 import { MemberAvatar } from '@/components/MemberAvatar'
 import type { Member } from '@/components/MemberAvatar'
 import { brand } from '@/lib/theme'
 import { fmtDay, fmtMoney } from '@/lib/format'
-import { tabularNums } from '@/lib/sx'
+import { toCents } from '@/lib/budget'
 import type { TransactionsMonthQuery } from '@/gql/graphql'
 
 type Txn = TransactionsMonthQuery['transactions'][number]
@@ -38,6 +39,7 @@ interface TransactionRowProps {
   categoryGroups: CategoryGroup[]
   onSetCategory: (path: string | null) => void
   onSetShared: (shared: boolean | null) => void
+  onSetAmount: (amount: number) => void
   onOpenSplit: () => void
   onDelete: () => void
   last?: boolean
@@ -65,13 +67,17 @@ export function TransactionRow({
   categoryGroups,
   onSetCategory,
   onSetShared,
+  onSetAmount,
   onOpenSplit,
   onDelete,
   last,
 }: TransactionRowProps) {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [splitMenuAnchor, setSplitMenuAnchor] = useState<HTMLElement | null>(null)
+  const [kebabAnchor, setKebabAnchor] = useState<HTMLElement | null>(null)
   const hasCategory = currentPath != null
+  const original = txn.originalAmount ?? txn.amount
+  const edited = toCents(txn.amount) !== toCents(original)
 
   return (
     <ListRow last={last} hover sx={{ gap: 2 }}>
@@ -203,9 +209,33 @@ export function TransactionRow({
         )}
       </Row>
 
-      <Typography variant="body2" sx={{ width: 96, textAlign: 'right', fontWeight: 600, ...tabularNums }}>
-        {fmtMoney(txn.amount)}
-      </Typography>
+      <Box sx={{ width: 112, flex: 'none', display: 'flex', justifyContent: 'flex-end' }}>
+        <EditableMoney value={txn.amount} onChange={onSetAmount} precise weight={600} />
+      </Box>
+
+      {edited ? (
+        <>
+          <IconButton
+            size="small"
+            aria-label={`More actions for ${txn.merchant}`}
+            onClick={(e) => setKebabAnchor(e.currentTarget)}
+          >
+            <MoreHorizIcon fontSize="small" />
+          </IconButton>
+          <Menu anchorEl={kebabAnchor} open={kebabAnchor != null} onClose={() => setKebabAnchor(null)}>
+            <MenuItem
+              onClick={() => {
+                onSetAmount(original)
+                setKebabAnchor(null)
+              }}
+            >
+              Revert to original
+            </MenuItem>
+          </Menu>
+        </>
+      ) : (
+        <Box sx={{ width: 34, flex: 'none' }} />
+      )}
 
       <IconButton size="small" aria-label={`Delete ${txn.merchant}`} onClick={onDelete}>
         <DeleteOutlineIcon fontSize="small" />

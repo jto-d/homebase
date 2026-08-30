@@ -169,16 +169,23 @@ builder.mutationFields((t) => ({
             // skipped rather than deleted. Revisit if that turns out to matter.
             if (!existing) continue
 
+            const overridden = existing.originalAmount != null
             const amountChanged = !existing.amount.equals(txn.amount)
-            if (amountChanged) await tx.transactionSplit.deleteMany({ where: { transactionId: existing.id } })
+            if (!overridden && amountChanged) {
+              await tx.transactionSplit.deleteMany({ where: { transactionId: existing.id } })
+            }
             await tx.transaction.update({
               where: { id: existing.id },
               data: {
                 merchant: txn.merchant_name ?? txn.name,
                 date: parseDateOnly(txn.date),
-                amount: txn.amount,
                 accountId: accountMap.get(txn.account_id) ?? existing.accountId,
-                ...(amountChanged ? { shared: null } : {}),
+                ...(overridden
+                  ? { originalAmount: existing.amount.equals(txn.amount) ? null : txn.amount }
+                  : {
+                      amount: txn.amount,
+                      ...(amountChanged ? { shared: null } : {}),
+                    }),
               },
             })
             updated++
