@@ -8,6 +8,7 @@ import {
   validateSplits,
   budgetLeaves,
   savingsNodeIds,
+  monthOrdinal,
   toCents,
   type SplitInput,
   type BudgetLeaf,
@@ -158,7 +159,6 @@ interface CopyData {
   label: string
   icon: string
   position: number
-  budget: number
   annualLimit: number | null
   isSavings: boolean
   months: { create: { year: number; month: number; budget: number } }
@@ -166,7 +166,7 @@ interface CopyData {
 }
 
 // Contribution history is not copied — only the tree shape and this month's
-// budget, same as everything else `copyBudgetFrom` carries over.
+// amounts. Later months stay $0 until copied or typed.
 function copyNode(node: CopyNode, byParent: Map<string | null, CopyNode[]>, into: CopyTarget): CopyData {
   return {
     householdId: into.householdId,
@@ -174,11 +174,8 @@ function copyNode(node: CopyNode, byParent: Map<string | null, CopyNode[]>, into
     label: node.label,
     icon: node.icon,
     position: node.position,
-    budget: node.budget,
     annualLimit: node.annualLimit,
     isSavings: node.isSavings,
-    // Both the override and the rolling default, like setNodeBudget: this month
-    // is what was copied, and the months after it start from the same figure.
     months: { create: { year: into.year, month: into.month, budget: node.budget } },
     children: { create: (byParent.get(node.id) ?? []).map((child) => copyNode(child, byParent, into)) },
   }
@@ -275,9 +272,7 @@ builder.mutationFields((t) => ({
   /**
    * Set a node's budget for one month.
    *
-   * Writes both the month override and the rolling default in one transaction:
-   * the number you type is what this month is, *and* what next month starts as,
-   * while the months already behind you keep whatever they were set to.
+   * Writes only the month row. Later months stay $0 until copied or typed.
    */
   setNodeBudget: t.boolean({
     args: {
@@ -300,14 +295,11 @@ builder.mutationFields((t) => ({
         throw new UserFacingError('This is calculated from its line items')
       }
 
-      await prisma.$transaction([
-        prisma.budgetNode.updateMany({ where: { id, householdId }, data: { budget } }),
-        prisma.budgetNodeMonth.upsert({
-          where: { nodeId_year_month: { nodeId: id, year, month } },
-          create: { nodeId: id, year, month, budget },
-          update: { budget },
-        }),
-      ])
+      await prisma.budgetNodeMonth.upsert({
+        where: { nodeId_year_month: { nodeId: id, year, month } },
+        create: { nodeId: id, year, month, budget },
+        update: { budget },
+      })
       return true
     },
   }),
@@ -332,8 +324,7 @@ builder.mutationFields((t) => ({
   /**
    * A savings node's transfer for one month — the number the YTD bar sums.
    *
-   * Unlike `setNodeBudget` this writes only the month row: a transfer is a fact
-   * about that month, not a standing figure the next month starts from.
+   * A transfer is a fact about that month, not a standing figure.
    */
   setNodeContributed: t.boolean({
     args: {
@@ -532,8 +523,7 @@ builder.mutationFields((t) => ({
       })
       if (source.length === 0) throw new UserFacingError('They have not set up a budget yet')
 
-      // Index by parent, resolving each amount the way the month view does: the
-      // override if this month has one, the rolling default otherwise.
+      // Index by parent. Amount is this month's override, or $0.
       const byParent = new Map<string | null, CopyNode[]>()
       for (const node of source) {
         const siblings = byParent.get(node.parentId) ?? []
@@ -543,7 +533,7 @@ builder.mutationFields((t) => ({
           label: node.label,
           icon: node.icon,
           position: node.position,
-          budget: (node.months[0]?.budget ?? node.budget).toNumber(),
+          budget: node.months[0]?.budget?.toNumber() ?? 0,
           annualLimit: node.annualLimit?.toNumber() ?? null,
           isSavings: node.isSavings,
         })
@@ -578,6 +568,55 @@ builder.mutationFields((t) => ({
           })
         }
       })
+      return true
+    },
+  }),
+
+  /**
+   * Copy last month's budget amounts onto this month, for one person.
+   *
+   * Tree shape is shared across months, so this is just the numbers. Income and
+   * savings contributions stay put.
+   */
+  copyBudgetFromLastMonth: t.boolean({
+    args: {
+      ownerId: t.arg.string({ required: true }),
+      year: t.arg.int({ required: true }),
+      month: t.arg.int({ required: true, description: '1-based: 1 = January. The month you are on.' }),
+    },
+    resolve: async (_root, { ownerId, year, month }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (month < 1 || month > 12) throw new UserFacingError('That month does not exist')
+      await assertMember(householdId, ownerId)
+
+      const prev = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 }
+      const household = await prisma.household.findUnique({
+        where: { id: householdId },
+        select: { budgetStartYear: true, budgetStartMonth: true },
+      })
+      if (
+        household?.budgetStartYear != null &&
+        household.budgetStartMonth != null &&
+        monthOrdinal(prev) < monthOrdinal({ year: household.budgetStartYear, month: household.budgetStartMonth })
+      ) {
+        throw new UserFacingError('This is the first month of the budget')
+      }
+
+      const nodes = await prisma.budgetNode.findMany({
+        where: { householdId, ownerId },
+        include: { months: { where: { year: prev.year, month: prev.month } } },
+      })
+
+      await prisma.$transaction(
+        nodes.map((node) => {
+          const budget = node.months[0]?.budget?.toNumber() ?? 0
+          return prisma.budgetNodeMonth.upsert({
+            where: { nodeId_year_month: { nodeId: node.id, year, month } },
+            create: { nodeId: node.id, year, month, budget },
+            update: { budget },
+          })
+        })
+      )
       return true
     },
   }),

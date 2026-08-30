@@ -105,3 +105,9 @@ export const CopyBudgetFromDocument = graphql(`
     copyBudgetFrom(fromOwnerId: $fromOwnerId, toOwnerId: $toOwnerId, year: $year, month: $month)
   }
 `)
+
+export const CopyBudgetFromLastMonthDocument = graphql(`
+  mutation CopyBudgetFromLastMonth($ownerId: String!, $year: Int!, $month: Int!) {
+    copyBudgetFromLastMonth(ownerId: $ownerId, year: $year, month: $month)
+  }
+`)

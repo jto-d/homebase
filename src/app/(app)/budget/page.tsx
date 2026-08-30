@@ -14,7 +14,7 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { MemberAvatar } from '@/components/MemberAvatar'
 import { MonthStepper, currentMonth, type MonthSel } from '@/components/MonthStepper'
 import { AppDialog, Row, Segmented, Stack } from '@/components/ui'
-import { budgetTotals, buildBudgetTree, type BudgetNodeData } from '@/lib/budget'
+import { budgetTotals, buildBudgetTree, monthOrdinal, type BudgetNodeData } from '@/lib/budget'
 import { NEW_CATEGORY, NEW_GROUP, NEW_INCOME, NEW_LINE_ITEM } from '@/lib/budgetDefaults'
 import { monthLabel } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
@@ -28,6 +28,7 @@ import {
   AddIncomeSourceDocument,
   BudgetMonthDocument,
   CopyBudgetFromDocument,
+  CopyBudgetFromLastMonthDocument,
   DeleteBudgetNodeDocument,
   RemoveIncomeSourceDocument,
   RenameBudgetNodeDocument,
@@ -48,7 +49,7 @@ export default function BudgetPage() {
   const [ownerId, setOwnerId] = useState(me.id)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
-  const [confirmCopy, setConfirmCopy] = useState(false)
+  const [confirmCopy, setConfirmCopy] = useState<'partner' | 'lastMonth' | null>(null)
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,6 +71,7 @@ export default function BudgetPage() {
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
   const [, removeIncome] = useMutation(RemoveIncomeSourceDocument)
   const [, copyBudgetFrom] = useMutation(CopyBudgetFromDocument)
+  const [, copyBudgetFromLastMonth] = useMutation(CopyBudgetFromLastMonthDocument)
 
   /**
    * Amounts committed locally but not yet echoed by the server.
@@ -149,6 +151,7 @@ export default function BudgetPage() {
   // The household caps at two, so "the other person" is whoever isn't on screen.
   const viewed = members.find((m) => m.id === ownerId)
   const other = members.find((m) => m.id !== ownerId)
+  const atBudgetStart = budgetStart != null && monthOrdinal(sel) <= monthOrdinal(budgetStart)
 
   const personOptions = members.map((m) => ({
     value: m.id,
@@ -165,33 +168,43 @@ export default function BudgetPage() {
         <Row gap={1.25} wrap>
           {members.length > 1 && <Segmented value={ownerId} onChange={setOwnerId} options={personOptions} />}
           <MonthStepper value={sel} onChange={setSel} min={budgetStart} />
-          {other && (
-            <IconButton
-              size="small"
-              onClick={(e) => setMenuAnchor(e.currentTarget)}
-              title="More"
-              sx={{
-                width: 38,
-                height: 38,
-                color: 'text.secondary',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: '9px',
-              }}
-            >
-              <MoreHorizIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          )}
+          <IconButton
+            size="small"
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            title="More"
+            sx={{
+              width: 38,
+              height: 38,
+              color: 'text.secondary',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: '9px',
+            }}
+          >
+            <MoreHorizIcon sx={{ fontSize: 18 }} />
+          </IconButton>
           <Menu anchorEl={menuAnchor} open={menuAnchor != null} onClose={() => setMenuAnchor(null)}>
             <MenuItem
+              disabled={atBudgetStart}
               onClick={() => {
                 setMenuAnchor(null)
-                setConfirmCopy(true)
+                setConfirmCopy('lastMonth')
               }}
               sx={{ fontSize: 13.5 }}
             >
-              Copy from {other ? memberLabel(other) : ''}
+              Copy from last month
             </MenuItem>
+            {other && (
+              <MenuItem
+                onClick={() => {
+                  setMenuAnchor(null)
+                  setConfirmCopy('partner')
+                }}
+                sx={{ fontSize: 13.5 }}
+              >
+                Copy from {memberLabel(other)}
+              </MenuItem>
+            )}
           </Menu>
         </Row>
       </Row>
@@ -241,10 +254,40 @@ export default function BudgetPage() {
         }}
       />
 
+      <AppDialog
+        open={confirmCopy === 'lastMonth'}
+        onClose={() => setConfirmCopy(null)}
+        title="Copy from last month"
+        subtitle={monthLabel(sel.year, sel.month)}
+        width={400}
+      >
+        <Box sx={{ px: '22px', pb: '4px' }}>
+          <Typography variant="body" sx={{ color: 'grey.500', lineHeight: 1.5 }}>
+            Last month&apos;s amounts replace this month&apos;s. Categories stay as they are. This
+            cannot be undone.
+          </Typography>
+        </Box>
+        <Row justify="end" gap="10px" sx={{ p: '16px 22px 20px' }}>
+          <Button variant="subtle" size="small" onClick={() => setConfirmCopy(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => {
+              setConfirmCopy(null)
+              run(() => copyBudgetFromLastMonth({ ownerId, ...sel }))
+            }}
+          >
+            Copy amounts
+          </Button>
+        </Row>
+      </AppDialog>
+
       {other && (
         <AppDialog
-          open={confirmCopy}
-          onClose={() => setConfirmCopy(false)}
+          open={confirmCopy === 'partner'}
+          onClose={() => setConfirmCopy(null)}
           title={`Copy ${memberLabel(other)}'s budget`}
           subtitle={monthLabel(sel.year, sel.month)}
           width={400}
@@ -257,14 +300,14 @@ export default function BudgetPage() {
             </Typography>
           </Box>
           <Row justify="end" gap="10px" sx={{ p: '16px 22px 20px' }}>
-            <Button variant="subtle" size="small" onClick={() => setConfirmCopy(false)}>
+            <Button variant="subtle" size="small" onClick={() => setConfirmCopy(null)}>
               Cancel
             </Button>
             <Button
               variant="contained"
               size="small"
               onClick={() => {
-                setConfirmCopy(false)
+                setConfirmCopy(null)
                 // Every node id in the tree is about to change.
                 setCollapsed({})
                 run(() => copyBudgetFrom({ fromOwnerId: other.id, toOwnerId: ownerId, ...sel }))

@@ -67,7 +67,7 @@ async function carriedBalances({
   householdId: string
   ownerId: string
   sel: { year: number; month: number }
-  nodes: readonly { id: string; budget: { toNumber(): number }; rollsOver: boolean; createdAt: Date }[]
+  nodes: readonly { id: string; rollsOver: boolean; createdAt: Date }[]
   household: { budgetStartYear: number | null; budgetStartMonth: number | null } | null
 }): Promise<Map<string, number>> {
   const rollsOverNodes = nodes.filter((n) => n.rollsOver)
@@ -122,7 +122,7 @@ async function carriedBalances({
     const overrides = overridesByNode.get(node.id)
     let budgeted = 0
     for (let ord = startOrd; ord < selOrd; ord++) {
-      budgeted += overrides?.get(ord) ?? node.budget.toNumber()
+      budgeted += overrides?.get(ord) ?? 0
     }
     result.set(node.id, roundCents(budgeted - (priorSpendBy.get(node.id) ?? 0)))
   }
@@ -205,8 +205,7 @@ builder.queryFields((t) => ({
             label: node.label,
             icon: node.icon,
             position: node.position,
-            // The month override wins; absent, the rolling default applies.
-            budget: (node.months[0]?.budget ?? node.budget).toNumber(),
+            budget: node.months[0]?.budget?.toNumber() ?? 0,
             annualLimit: node.annualLimit?.toNumber() ?? null,
             isSavings: isSavingsNode,
             rollsOver: node.rollsOver,

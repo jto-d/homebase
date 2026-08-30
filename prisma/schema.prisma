@@ -174,7 +174,8 @@ model BudgetNode {
   /// Icon slug resolved by CatGlyph; unknown slugs fall back to a banknote.
   icon        String
   position    Int
-  /// The rolling default, used for any month with no BudgetNodeMonth override.
+  /// Unused leftover. A month with no BudgetNodeMonth.budget is $0; copy last
+  /// month's amounts explicitly via copyBudgetFromLastMonth.
   budget      Decimal  @default(0) @db.Decimal(10, 2)
   /// Set = this is a savings node, which draws a year-to-date bar against the
   /// limit. There is no SavingsAccount model: savings is a shape, not a table.
@@ -206,10 +207,8 @@ model BudgetNode {
   @@index([parentId])
 }
 
-/// A per-month override of `BudgetNode.budget`, and/or a savings node's typed
-/// transfer for the month. Absent `budget` means "use the rolling default",
-/// which is what keeps a budget you set once applying to every future month
-/// while last March stays exactly as it was.
+/// Per-month budget and/or a savings node's typed transfer. Absent `budget`
+/// means $0 for that month — copy last month's amounts via copyBudgetFromLastMonth.
 model BudgetNodeMonth {
   id     String     @id @default(cuid())
   nodeId String
@@ -217,8 +216,7 @@ model BudgetNodeMonth {
   year   Int
   /// 1-based, like every other month in this app.
   month       Int
-  /// Nullable so a contribution-only write doesn't freeze this month's budget at
-  /// whatever the rolling default happened to be.
+  /// Nullable so a contribution-only write doesn't freeze this month's budget at $0.
   budget      Decimal? @db.Decimal(10, 2)
   /// A savings node's manually entered transfer for this month. Only meaningful
   /// on a savings node, where it *replaces* derived spend rather than adding to

@@ -30,10 +30,10 @@ builder.prismaObject('TransactionSplit', {
 /**
  * One node of the budget tree, resolved for a specific month.
  *
- * Deliberately *not* a `prismaObject`. `BudgetNode.budget` is a rolling default
- * that a `BudgetNodeMonth` row may override, and `spent`/`ytd` are derived from
- * transactions — none of the three mean anything without a month in scope, and
- * a Prisma object would invite reading them without one.
+ * Deliberately *not* a `prismaObject`. `budget` is this month's override (or $0),
+ * and `spent`/`ytd` are derived from transactions — none of the three mean
+ * anything without a month in scope, and a Prisma object would invite reading
+ * them without one.
  */
 export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
   fields: (t) => ({
@@ -43,8 +43,8 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     label: t.string(),
     icon: t.string(),
     position: t.int(),
-    /// This month's override, or the rolling default. Ignore it on a node with
-    /// children — that one is the sum of its children (see `buildBudgetTree`).
+    /// This month's override, or $0. Ignore it on a node with children — that
+    /// one is the sum of its children (see `buildBudgetTree`).
     budget: t.float(),
     /// Set = draws a year-to-date bar against this limit. Only meaningful on a
     /// savings node.
