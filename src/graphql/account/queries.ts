@@ -43,15 +43,27 @@ builder.queryFields((t) => ({
             for (const row of created) byPlaid.set(row.plaidAccountId, row)
           }
 
-          const hasInvestment = kept.some((a) => a.type === 'investment')
+          // Plaid types some accounts (e.g. a Merrill CMA) as `depository` even
+          // though they hold securities — investmentsOnly is the household's own
+          // signal that this item is a brokerage, so it forces the holdings call
+          // regardless of what Plaid calls the account. Not every account on an
+          // investmentsOnly item necessarily has holdings (e.g. a plain checking
+          // account linked investments-only), so the call can legitimately fail
+          // for accounts with no investments product — caught below rather than
+          // failing the whole accounts query.
+          const hasInvestment = item.investmentsOnly || kept.some((a) => a.type === 'investment')
           const holdingsByAccount = new Map<string, PlaidHolding[]>()
           const securities = new Map<string, Security>()
           if (hasInvestment) {
-            const inv = await plaid(() => plaidClient.investmentsHoldingsGet({ access_token: item.accessToken }))
-            for (const s of inv.data.securities) securities.set(s.security_id, s)
-            for (const h of inv.data.holdings) {
-              if (!holdingsByAccount.has(h.account_id)) holdingsByAccount.set(h.account_id, [])
-              holdingsByAccount.get(h.account_id)!.push(h)
+            try {
+              const inv = await plaid(() => plaidClient.investmentsHoldingsGet({ access_token: item.accessToken }))
+              for (const s of inv.data.securities) securities.set(s.security_id, s)
+              for (const h of inv.data.holdings) {
+                if (!holdingsByAccount.has(h.account_id)) holdingsByAccount.set(h.account_id, [])
+                holdingsByAccount.get(h.account_id)!.push(h)
+              }
+            } catch {
+              // No investments product on this item — leave holdings empty.
             }
           }
 
@@ -59,7 +71,7 @@ builder.queryFields((t) => ({
             id: byPlaid.get(a.account_id)!.id,
             name: byPlaid.get(a.account_id)?.nickname || a.name,
             mask: a.mask,
-            kind: a.type === 'investment' ? 'investment' : 'cash',
+            kind: a.type === 'investment' || holdingsByAccount.has(a.account_id) ? 'investment' : 'cash',
             subtype: a.subtype,
             institutionName: item.institutionName,
             ownerId: item.ownerId,
