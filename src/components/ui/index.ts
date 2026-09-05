@@ -21,6 +21,7 @@ export { StatusChip } from './data-display/StatusChip'
 
 export { EditableLabel } from './inputs/EditableLabel'
 export { EditableMoney } from './inputs/EditableMoney'
+export { EditableNumber } from './inputs/EditableNumber'
 export { Segmented } from './inputs/Segmented'
 export type { SegmentedOption } from './inputs/Segmented'
 

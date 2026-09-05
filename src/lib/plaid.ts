@@ -35,8 +35,8 @@ export async function plaid<T>(call: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Upsert a page of Plaid's account payload (dumb mirror, overwritten wholesale
- * every call — see PlaidAccount's schema comment) and return a
+ * Upsert a page of Plaid's account payload (`name`/`mask`/`type`/`subtype`
+ * overwritten wholesale; `nickname` is left alone) and return a
  * Plaid account_id -> PlaidAccount.id map for stamping onto transactions.
  * Shared by the sync mutation and the one-off backfill script.
  */

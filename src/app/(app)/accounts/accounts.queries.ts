@@ -43,3 +43,9 @@ export const LinkInvestmentAccountDocument = graphql(`
     }
   }
 `)
+
+export const RenameAccountDocument = graphql(`
+  mutation RenameAccount($id: String!, $name: String!) {
+    renameAccount(id: $id, name: $name)
+  }
+`)

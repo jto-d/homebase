@@ -16,7 +16,10 @@ builder.prismaObject('PlaidItem', {
 builder.prismaObject('PlaidAccount', {
   fields: (t) => ({
     id: t.exposeID('id'),
-    name: t.exposeString('name'),
+    name: t.string({
+      select: { name: true, nickname: true },
+      resolve: (account) => account.nickname || account.name,
+    }),
     mask: t.exposeString('mask', { nullable: true }),
     type: t.exposeString('type'),
     subtype: t.exposeString('subtype', { nullable: true }),

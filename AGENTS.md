@@ -200,9 +200,10 @@ A household-scoped port of Anchor's card/perk tracker (`../anchor/src/utils/{per
 `src/data/{cardCatalog,perkCatalog}.ts`) — same models, same cycle math, same catalogs, ported
 verbatim rather than redesigned. `src/graphql/creditCard/`, `src/app/(app)/cards/`.
 
-- **`CreditCard.ownerId` is the one deliberate exception to the nullable-`ownerId` convention
+- **`CreditCard.ownerId` is one of two deliberate exceptions to the nullable-`ownerId` convention
   above — it is required, not nullable.** A card is issued to one person; there is no joint card,
-  and the whole Cards page groups and totals by owner. Every other domain keeps `ownerId` nullable.
+  and the whole Cards page groups and totals by owner. `PointsProgram.ownerId` (see Points below)
+  is the other. Every other domain keeps `ownerId` nullable.
 - `src/lib/cardCatalog.ts` and `src/lib/perkCatalog.ts` are **data, not code** — a ~80-card catalog
   (branding, network, annual fee, reward multipliers) and per-product perk templates, both copied
   from Anchor unedited. Don't "clean up" or restructure them; a diff against Anchor's copy should
@@ -220,6 +221,20 @@ verbatim rather than redesigned. `src/graphql/creditCard/`, `src/app/(app)/cards
   fee) and `src/lib/cardRewards.ts` (best-card-by-category ranking, `CARD_CATALOG` ↔ GraphQL
   bridge) round out the port. `annualFee` is resolved from the catalog in the GraphQL layer
   (`CreditCard.annualFee`) — never stored on the row.
+
+## Points
+
+A hand-maintained loyalty-points tracker (Chase UR, World of Hyatt, ...) — `src/graphql/points/`,
+`src/app/(app)/points/`. Unlike Cards, there's no catalog and no external sync: `PointsProgram.balance`
+is just a number the household types in and keeps current.
+
+- `PointsProgram.ownerId` is required, the same deliberate exception `CreditCard.ownerId` makes —
+  see above. A program's `PointsRedemption.ownerId` is separate and nullable: it's who *booked* the
+  redemption, which need not be the program's owner.
+- **The balance is the single source of truth, not a derived total.** `logPointsRedemption` and
+  `deletePointsRedemption` decrement/increment `PointsProgram.balance` in the same `$transaction`
+  as the ledger write — there is no reconciliation step, so a mutation that touches one without the
+  other leaves the balance permanently wrong.
 
 ## urql client
 

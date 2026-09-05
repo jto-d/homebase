@@ -13,12 +13,17 @@ import RefreshIcon from '@mui/icons-material/RefreshOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined'
 import { MemberAvatar, type Member } from '@/components/MemberAvatar'
 import { LinkBankDialog } from '@/components/LinkBankDialog'
-import { CatGlyph, Eyebrow, ListRow, Row, Segmented, Stack, Stat, SurfaceCard } from '@/components/ui'
+import { CatGlyph, EditableLabel, Eyebrow, ListRow, Row, Segmented, Stack, Stat, SurfaceCard } from '@/components/ui'
 import { fmtDollars, fmtMoney } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
 import { tabularNums, truncate } from '@/lib/sx'
 import { useHousehold } from '../household-context'
-import { AccountsDocument, CreateInvestmentLinkTokenDocument, LinkInvestmentAccountDocument } from './accounts.queries'
+import {
+  AccountsDocument,
+  CreateInvestmentLinkTokenDocument,
+  LinkInvestmentAccountDocument,
+  RenameAccountDocument,
+} from './accounts.queries'
 import type { AccountsQuery } from '@/gql/graphql'
 
 type Account = AccountsQuery['accounts'][number]
@@ -34,10 +39,12 @@ export default function AccountsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [closed, setClosed] = useState<Record<string, boolean>>({})
   const [view, setView] = useState(HOUSEHOLD)
+  const [nicknames, setNicknames] = useState<Record<string, string>>({})
 
   const [{ data, fetching }, refetch] = useQuery({ query: AccountsDocument })
   const [, createLinkToken] = useMutation(CreateInvestmentLinkTokenDocument)
   const [, linkAccount] = useMutation(LinkInvestmentAccountDocument)
+  const [, renameAccount] = useMutation(RenameAccountDocument)
 
   function reload() {
     refetch({ requestPolicy: 'network-only' })
@@ -50,6 +57,17 @@ export default function AccountsPage() {
     }
     setError(null)
     return true
+  }
+
+  async function onRename(id: string, name: string) {
+    setNicknames((p) => ({ ...p, [id]: name }))
+    const result = await renameAccount({ id, name })
+    if (report(result)) return
+    setNicknames((p) => {
+      const next = { ...p }
+      delete next[id]
+      return next
+    })
   }
 
   const all = data?.accounts ?? []
@@ -97,10 +115,12 @@ export default function AccountsPage() {
               key={a.id}
               account={a}
               owner={ownerFor(a)}
+              name={nicknames[a.id] ?? a.name}
               subLine={subLine(a)}
               last={i === items.length - 1}
               expanded={!!expanded[a.id]}
               onToggle={() => setExpanded((p) => ({ ...p, [a.id]: !p[a.id] }))}
+              onRename={(name) => onRename(a.id, name)}
             />
           ))}
         </Collapse>
@@ -191,17 +211,21 @@ function capitalize(s: string): string {
 function AccountRow({
   account,
   owner,
+  name,
   subLine,
   last,
   expanded,
   onToggle,
+  onRename,
 }: {
   account: Account
   owner: Member | null | undefined
+  name: string
   subLine: string
   last: boolean
   expanded: boolean
   onToggle: () => void
+  onRename: (name: string) => void
 }) {
   const isInvestment = account.kind === 'investment'
   return (
@@ -209,9 +233,9 @@ function AccountRow({
       <ListRow gap={1.5} last={last && !expanded} hover={isInvestment} onClick={isInvestment ? onToggle : undefined}>
         {owner ? <MemberAvatar member={owner} size={32} /> : <CatGlyph icon="wallet" tone="neutral" size={32} />}
         <Stack sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600, ...truncate }}>
-            {account.name}
-          </Typography>
+          <Box onClick={(e) => e.stopPropagation()} sx={{ minWidth: 0 }}>
+            <EditableLabel value={name} onChange={onRename} size={14} weight={600} />
+          </Box>
           <Typography variant="caption" noWrap sx={{ color: 'text.secondary', ...truncate }}>
             {subLine}
           </Typography>

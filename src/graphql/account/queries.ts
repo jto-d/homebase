@@ -2,7 +2,7 @@ import type { AccountBase, Holding as PlaidHolding, Security } from 'plaid'
 import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { prisma } from '@/lib/prisma'
-import { plaidClient, plaid } from '@/lib/plaid'
+import { plaidClient, plaid, upsertPlaidAccounts } from '@/lib/plaid'
 import { Account } from './type'
 
 /** Equities/ETFs/mutual funds have a share count worth showing; everything else doesn't. */
@@ -28,6 +28,21 @@ builder.queryFields((t) => ({
           )
           if (kept.length === 0) return []
 
+          const existing = await prisma.plaidAccount.findMany({
+            where: { itemId: item.id },
+            select: { id: true, plaidAccountId: true, nickname: true },
+          })
+          const byPlaid = new Map(existing.map((row) => [row.plaidAccountId, row]))
+          const missing = kept.filter((a) => !byPlaid.has(a.account_id))
+          if (missing.length > 0) {
+            await prisma.$transaction((tx) => upsertPlaidAccounts(tx, item.id, missing))
+            const created = await prisma.plaidAccount.findMany({
+              where: { itemId: item.id, plaidAccountId: { in: missing.map((a) => a.account_id) } },
+              select: { id: true, plaidAccountId: true, nickname: true },
+            })
+            for (const row of created) byPlaid.set(row.plaidAccountId, row)
+          }
+
           const hasInvestment = kept.some((a) => a.type === 'investment')
           const holdingsByAccount = new Map<string, PlaidHolding[]>()
           const securities = new Map<string, Security>()
@@ -41,8 +56,8 @@ builder.queryFields((t) => ({
           }
 
           return kept.map((a) => ({
-            id: a.account_id,
-            name: a.name,
+            id: byPlaid.get(a.account_id)!.id,
+            name: byPlaid.get(a.account_id)?.nickname || a.name,
             mask: a.mask,
             kind: a.type === 'investment' ? 'investment' : 'cash',
             subtype: a.subtype,

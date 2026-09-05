@@ -40,6 +40,7 @@ model Household {
   plaidItems    PlaidItem[]
   settlements   Settlement[]
   creditCards   CreditCard[]
+  pointsPrograms PointsProgram[]
 }
 
 model User {
@@ -65,6 +66,8 @@ model User {
   settlementsPaid     Settlement[] @relation("SettlementsPaid")
   settlementsReceived Settlement[] @relation("SettlementsReceived")
   creditCards         CreditCard[]
+  pointsPrograms      PointsProgram[]
+  pointsRedemptions   PointsRedemption[]
 
   @@index([householdId])
 }
@@ -98,10 +101,10 @@ model PlaidItem {
   @@index([householdId])
 }
 
-/// A mirror of one account inside a PlaidItem, refreshed from every sync's
-/// `accounts` payload. Deliberately dumb: nothing user-authored lives here, so it
-/// can be overwritten wholesale. The Cards feature gets its own model pointing at
-/// this one, so unlinked cards still work.
+/// A mirror of one account inside a PlaidItem. `name`/`mask`/`type`/`subtype`
+/// are overwritten on every sync; `nickname` is the one user-authored field and
+/// is left alone. The Cards feature gets its own model pointing at this one, so
+/// unlinked cards still work.
 ///
 /// No `householdId` — unlike every other model, this one scopes through `item`.
 /// It is derived from the item, so a column here could only ever drift from it,
@@ -112,6 +115,8 @@ model PlaidAccount {
   /// Plaid's account_id. The dedup key for the sync upsert.
   plaidAccountId String  @unique
   name           String
+  /// User-authored label. Null = show Plaid's `name`. Survives sync.
+  nickname       String?
   /// Last 4. Nullable — Plaid omits it for some institutions.
   mask           String?
   /// "credit" | "depository" | ... and its subtype ("credit card", "checking").
@@ -421,4 +426,54 @@ model PerkCredit {
   perk Perk @relation(fields: [perkId], references: [id], onDelete: Cascade)
 
   @@index([perkId])
+}
+
+enum PointsProgramKind {
+  TRANSFERABLE
+  HOTEL
+  AIRLINE
+}
+
+/// A loyalty-points account tracked by hand (Chase UR, World of Hyatt, ...).
+/// Balances aren't fetched from anywhere — they're typed in and kept current by
+/// redemptions logged against them.
+model PointsProgram {
+  id        String            @id @default(cuid())
+  name      String
+  kind      PointsProgramKind
+  /// Hand-maintained current balance. logPointsRedemption decrements it,
+  /// deletePointsRedemption puts it back, and tapping the number on the Points
+  /// page overwrites it directly.
+  balance   Int
+  createdAt DateTime          @default(now())
+
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  /// Required, like CreditCard.ownerId and unlike the household's usual nullable
+  /// convention: a points account is opened by one person and the Points page
+  /// groups and filters by owner. There is no joint program.
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  redemptions PointsRedemption[]
+
+  @@index([householdId])
+}
+
+/// One logged redemption against a program's balance — append-only, the same
+/// pattern as PerkCredit. `ownerId` is who booked it, which need not be the
+/// program's owner (e.g. spending a joint trip out of one person's Amex MR).
+model PointsRedemption {
+  id          String   @id @default(cuid())
+  programId   String
+  points      Int
+  date        DateTime @db.Date
+  description String
+  createdAt   DateTime @default(now())
+
+  program PointsProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([programId, date])
 }

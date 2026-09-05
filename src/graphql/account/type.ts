@@ -1,8 +1,8 @@
 import { builder } from '../builder'
 
 /**
- * Everything below comes from Plaid at request time, not the DB — `simpleObject`
- * rather than `prismaObject`, same as the Split page's computed payloads.
+ * Live balances/holdings from Plaid, overlaid with a stored nickname.
+ * `simpleObject` rather than `prismaObject` — same as the Split page's computed payloads.
  */
 const Holding = builder.simpleObject('Holding', {
   fields: (t) => ({

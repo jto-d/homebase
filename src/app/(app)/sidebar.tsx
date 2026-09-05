@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: '/transactions', label: 'Transactions' },
   { href: '/accounts', label: 'Accounts' },
   { href: '/cards', label: 'Cards' },
+  { href: '/points', label: 'Points' },
   { href: '/split', label: 'Split' },
   { href: '/settings', label: 'Settings' },
 ]
