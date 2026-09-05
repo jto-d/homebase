@@ -19,12 +19,13 @@ export const Account = builder.simpleObject('Account', {
     id: t.string(),
     name: t.string(),
     mask: t.string({ nullable: true }),
-    /// 'cash' | 'investment' — credit/loan accounts are filtered out before this.
+    /// 'cash' | 'investment' | 'credit' — loan accounts are filtered out before this.
     kind: t.string(),
     subtype: t.string({ nullable: true }),
     institutionName: t.string(),
     /// From the owning PlaidItem. null = joint.
     ownerId: t.string({ nullable: true }),
+    /// Negative for credit accounts — the amount owed — so a sum of these is net worth.
     balance: t.float(),
     /// Empty for cash accounts and for investment accounts Plaid has no holdings for.
     holdings: t.field({ type: [Holding] }),

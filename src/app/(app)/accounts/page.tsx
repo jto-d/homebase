@@ -74,6 +74,7 @@ export default function AccountsPage() {
   const accounts = view === HOUSEHOLD ? all : all.filter((a) => a.ownerId === view || a.ownerId === null)
   const cash = accounts.filter((a) => a.kind === 'cash')
   const investments = accounts.filter((a) => a.kind === 'investment')
+  const credit = accounts.filter((a) => a.kind === 'credit')
   const total = accounts.reduce((sum, a) => sum + a.balance, 0)
 
   function subLine(a: Account): string {
@@ -106,7 +107,7 @@ export default function AccountsPage() {
             {label} <Box component="span" sx={{ color: 'text.disabled', fontWeight: 600 }}>{items.length}</Box>
           </Eyebrow>
           <Typography variant="body2" sx={{ fontWeight: 600, ...tabularNums }}>
-            {fmtDollars(groupTotal)}
+            {fmtNet(groupTotal)}
           </Typography>
         </Stack>
         <Collapse in={!collapsed}>
@@ -131,7 +132,7 @@ export default function AccountsPage() {
   return (
     <Stack gap={3} sx={{ maxWidth: 820, mx: 'auto' }}>
       <Row justify="between" align="end">
-        <Stat hero label="Total" value={fmtDollars(total)} />
+        <Stat hero label="Net worth" value={fmtNet(total)} />
         <Row gap={1.5}>
           {partner && (
             <Segmented
@@ -176,9 +177,10 @@ export default function AccountsPage() {
         <SurfaceCard>
           {renderGroup('Cash', 'wallet', 'neutral', cash)}
           {renderGroup('Investments', 'trendingUp', 'accent', investments)}
+          {renderGroup('Credit cards', 'creditCard', 'neutral', credit)}
           <Row justify="between" align="center" sx={{ px: 2.5, py: 1.75, bgcolor: 'grey.50', borderTop: '1px solid', borderColor: 'divider' }}>
-            <Eyebrow>Total assets</Eyebrow>
-            <Typography sx={{ fontWeight: 700, ...tabularNums }}>{fmtDollars(total)}</Typography>
+            <Eyebrow>Net worth</Eyebrow>
+            <Typography sx={{ fontWeight: 700, ...tabularNums }}>{fmtNet(total)}</Typography>
           </Row>
         </SurfaceCard>
       )}
@@ -206,6 +208,11 @@ export default function AccountsPage() {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/** fmtDollars is absolute by design; totals here go negative once credit cards are in. */
+function fmtNet(n: number): string {
+  return (n < 0 ? '−' : '') + fmtDollars(n)
 }
 
 function AccountRow({

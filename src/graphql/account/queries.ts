@@ -24,7 +24,7 @@ builder.queryFields((t) => ({
         items.map(async (item) => {
           const balances = await plaid(() => plaidClient.accountsBalanceGet({ access_token: item.accessToken }))
           const kept = balances.data.accounts.filter(
-            (a: AccountBase) => a.type === 'depository' || a.type === 'investment'
+            (a: AccountBase) => a.type === 'depository' || a.type === 'investment' || a.type === 'credit'
           )
           if (kept.length === 0) return []
 
@@ -71,11 +71,19 @@ builder.queryFields((t) => ({
             id: byPlaid.get(a.account_id)!.id,
             name: byPlaid.get(a.account_id)?.nickname || a.name,
             mask: a.mask,
-            kind: a.type === 'investment' || holdingsByAccount.has(a.account_id) ? 'investment' : 'cash',
+            kind:
+              a.type === 'credit'
+                ? 'credit'
+                : a.type === 'investment' || holdingsByAccount.has(a.account_id)
+                  ? 'investment'
+                  : 'cash',
             subtype: a.subtype,
             institutionName: item.institutionName,
             ownerId: item.ownerId,
-            balance: a.balances.current ?? a.balances.available ?? 0,
+            // Plaid reports a card's current balance as a positive amount owed, and
+            // `available` on credit is the remaining credit limit, not a balance — never
+            // fall back to it here. Negate so a sum of every account's balance is net worth.
+            balance: a.type === 'credit' ? -(a.balances.current ?? 0) : a.balances.current ?? a.balances.available ?? 0,
             holdings: (holdingsByAccount.get(a.account_id) ?? []).map((h) => {
               const security = securities.get(h.security_id)
               return {
@@ -89,7 +97,10 @@ builder.queryFields((t) => ({
         })
       )
 
-      return perItem.flat().sort((a, b) => (a.kind === b.kind ? b.balance - a.balance : a.kind === 'cash' ? -1 : 1))
+      const RANK = { cash: 0, investment: 1, credit: 2 } as const
+      return perItem
+        .flat()
+        .sort((a, b) => RANK[a.kind as keyof typeof RANK] - RANK[b.kind as keyof typeof RANK] || Math.abs(b.balance) - Math.abs(a.balance))
     },
   }),
 }))
