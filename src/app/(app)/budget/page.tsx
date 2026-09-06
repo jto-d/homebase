@@ -19,6 +19,7 @@ import { NEW_CATEGORY, NEW_GROUP, NEW_INCOME, NEW_LINE_ITEM } from '@/lib/budget
 import { monthLabel } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
 import { useHousehold } from '../household-context'
+import { BudgetedPanel } from './budgeted-panel'
 import { BudgetLedger, type LedgerHandlers } from './budget-ledger'
 import { DeleteNodeDialog, type PendingDelete } from './delete-node-dialog'
 import { IncomePanel } from './income-panel'
@@ -221,7 +222,7 @@ export default function BudgetPage() {
         </Row>
       ) : (
         <>
-          <SummaryStrip totals={totals} />
+          <SummaryStrip totals={totals} sel={sel} />
 
           <Box
             sx={{
@@ -232,14 +233,17 @@ export default function BudgetPage() {
             }}
           >
             <BudgetLedger roots={roots} totals={totals} collapsed={collapsed} handlers={handlers} />
-            <IncomePanel
-              income={income}
-              total={totals.income}
-              onAdd={() => run(() => addIncome({ ownerId, ...NEW_INCOME, amount: 0 }))}
-              onRename={(id, label) => run(() => renameIncome({ id, label }))}
-              onSetAmount={(id, amount) => run(() => setIncomeAmount({ id, amount }), { key: id, value: amount })}
-              onRemove={(id) => run(() => removeIncome({ id }))}
-            />
+            <Stack gap={3}>
+              <BudgetedPanel totals={totals} />
+              <IncomePanel
+                income={income}
+                total={totals.income}
+                onAdd={() => run(() => addIncome({ ownerId, ...NEW_INCOME, amount: 0 }))}
+                onRename={(id, label) => run(() => renameIncome({ id, label }))}
+                onSetAmount={(id, amount) => run(() => setIncomeAmount({ id, amount }), { key: id, value: amount })}
+                onRemove={(id) => run(() => removeIncome({ id }))}
+              />
+            </Stack>
           </Box>
         </>
       )}

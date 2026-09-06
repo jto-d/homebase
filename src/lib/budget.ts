@@ -146,6 +146,10 @@ export interface BudgetTotals {
   incomeCount: number
   budgeted: number
   spent: number
+  /** Budget of the topmost `isSavings` nodes — not double-counted with a savings parent. */
+  savings: number
+  /** What's left to spend outside savings — `(budgeted − savings) − (spent outside savings)`. */
+  spendingRemaining: number
   /** What's left of income after everything budgeted. Negative = over-committed. */
   surplus: number
 }
@@ -156,12 +160,75 @@ export function budgetTotals(
 ): BudgetTotals {
   const total = sumMoney(income, (i) => i.amount)
   const budgeted = sumMoney(roots, (r) => r.budget)
+  const spent = sumMoney(roots, (r) => r.spent)
+  // Stop recursing at the first isSavings node in a branch — a category flagged
+  // under an already-flagged group would otherwise be summed twice. Same shape
+  // for budget and spent so "outside savings" stays consistent between them.
+  const savingsSum = (nodes: readonly BudgetTreeNode[], of: (n: BudgetTreeNode) => number): number =>
+    sumMoney(nodes, (n) => (n.isSavings ? of(n) : savingsSum(n.children, of)))
+  const savings = savingsSum(roots, (n) => n.budget)
+  const savingsSpent = savingsSum(roots, (n) => n.spent)
   return {
     income: total,
     incomeCount: income.length,
     budgeted,
-    spent: sumMoney(roots, (r) => r.spent),
+    spent,
+    savings,
+    spendingRemaining: roundCents(budgeted - savings - (spent - savingsSpent)),
     surplus: roundCents(total - budgeted),
+  }
+}
+
+export interface BudgetPace {
+  /** Budgeted minus spent — the hero number. Can go negative. */
+  leftToSpend: number
+  /** Remaining in the month, today included. 0 for a past month. */
+  daysLeft: number
+  /** `leftToSpend` spread over `daysLeft`. */
+  perDay: number
+  /** How much of the month has elapsed, 0–1. 1 for a past month, 0 for a future one. */
+  monthFraction: number
+  /** How far spend has run ahead of an even pace through today. Never negative. */
+  overspent: number
+}
+
+/**
+ * Spend-pace figures for the summary strip's hero card.
+ *
+ * Timezone note: every other date helper here (`monthRange`, `parseDateOnly`)
+ * reads UTC, per the budgeting domain's convention. This one deliberately reads
+ * `now` in **local** time instead, because "today" must agree with
+ * `currentMonth()` in `src/components/MonthStepper.tsx` (also local) — a
+ * pace figure computed against the wrong "today" would disagree with the month
+ * the stepper considers current. Only the day-of-month uses local getters; the
+ * days-in-month arithmetic stays UTC.
+ */
+export function budgetPace(totals: BudgetTotals, sel: MonthSel, now: Date = new Date()): BudgetPace {
+  const leftToSpend = roundCents(totals.budgeted - totals.spent)
+  const daysInMonth = new Date(Date.UTC(sel.year, sel.month, 0)).getUTCDate()
+  const nowOrdinal = now.getFullYear() * 12 + now.getMonth()
+  const selOrdinal = sel.year * 12 + (sel.month - 1)
+
+  let elapsed: number
+  let daysLeft: number
+  if (selOrdinal < nowOrdinal) {
+    elapsed = daysInMonth
+    daysLeft = 0
+  } else if (selOrdinal > nowOrdinal) {
+    elapsed = 0
+    daysLeft = daysInMonth
+  } else {
+    elapsed = now.getDate()
+    daysLeft = daysInMonth - elapsed + 1 // today still counts as spendable
+  }
+
+  const monthFraction = elapsed / daysInMonth
+  return {
+    leftToSpend,
+    daysLeft,
+    perDay: leftToSpend / Math.max(1, daysLeft),
+    monthFraction,
+    overspent: Math.max(0, roundCents(totals.spent - totals.budgeted * monthFraction)),
   }
 }
 
