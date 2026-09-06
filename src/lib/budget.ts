@@ -91,6 +91,13 @@ export interface BudgetNodeData {
   ytd: number
   /// Balance through the end of the *previous* month. 0 unless rollsOver.
   carried: number
+  /// Open-ended target this fund saves toward. Meaningful alongside isSavings
+  /// or rollsOver only — not rolled up by buildBudgetTree, since a goal is a
+  /// leaf's own, never a group's.
+  goalTarget: number | null
+  /// Balance through the end of the selected month. 0 unless isSavings or
+  /// rollsOver. Not rolled up, for the same reason as goalTarget.
+  banked: number
 }
 
 export interface BudgetTreeNode extends BudgetNodeData {
@@ -295,6 +302,86 @@ export function budgetLeaves(
     .filter((node) => !hasChildren.has(node.id) && !savings.has(node.id))
     .map((node) => ({ id: node.id, label: node.label, path: path(node.id), ownerId: node.ownerId }))
     .sort((a, b) => a.path.localeCompare(b.path))
+}
+
+export interface LeftoverNode {
+  id: string
+  parentId: string | null
+  /** This node's own budget for the month — dead on a group; see `buildBudgetTree`. */
+  budget: number
+  spent: number
+  /** Inherited, like `BudgetNodeData.isSavings`. */
+  isSavings: boolean
+  rollsOver: boolean
+}
+
+/**
+ * The pool a month-end sweep can draw from: leaf categories' own
+ * budget-minus-spend, for leaves that don't already accrue.
+ *
+ * Leaves only — a group's `budget` is the sum of its children
+ * (`buildBudgetTree`), so summing both would double the same money. Excludes
+ * `isSavings`/`rollsOver` nodes for the reason `bankedBalances` (server) exists
+ * at all: their leftover already sits in their own balance (`carried` or
+ * `contributed`), so pooling it here would let the same dollar be swept twice.
+ * `monthSwept` is netted out so the pool shrinks as it's used.
+ */
+export function monthLeftover(nodes: readonly LeftoverNode[], monthSwept: number): number {
+  const hasChildren = new Set(nodes.map((n) => n.parentId).filter((id): id is string => id != null))
+  const pool = sumMoney(
+    nodes.filter((n) => !hasChildren.has(n.id) && !n.isSavings && !n.rollsOver),
+    (n) => n.budget - n.spent
+  )
+  return Math.max(0, roundCents(pool - monthSwept))
+}
+
+export interface GoalProgress {
+  /** `banked / goalTarget`, un-clamped — the caller clamps for a bar (`clamp01`). */
+  ratio: number
+  /** Months at the current rate until the target is hit. Null = no rate, or already there. */
+  monthsLeft: number | null
+  projectedDate: MonthSel | null
+}
+
+/**
+ * Progress toward an open-ended goal, projected from the current balance and
+ * monthly rate — there is no target date to read (see the plan's decision to
+ * skip one). Dates are UTC, like every other date helper in this file.
+ */
+export function goalProgress({
+  banked,
+  goalTarget,
+  monthly,
+  sel,
+}: {
+  banked: number
+  goalTarget: number
+  monthly: number
+  sel: MonthSel
+}): GoalProgress {
+  const ratio = goalTarget > 0 ? banked / goalTarget : 0
+  if (banked >= goalTarget) return { ratio, monthsLeft: 0, projectedDate: null }
+  if (monthly <= 0) return { ratio, monthsLeft: null, projectedDate: null }
+
+  const monthsLeft = Math.ceil(roundCents(goalTarget - banked) / monthly)
+  const targetOrd = monthOrdinal(sel) + monthsLeft
+  return { ratio, monthsLeft, projectedDate: { year: Math.floor(targetOrd / 12), month: (targetOrd % 12) + 1 } }
+}
+
+/** Splits `total` across `nodeIds` as evenly as cents allow — the remainder lands on the first id. */
+export function splitEvenly(total: number, nodeIds: readonly string[]): Map<string, number> {
+  const result = new Map<string, number>()
+  if (nodeIds.length === 0) return result
+
+  const totalCents = toCents(total)
+  const share = Math.floor(totalCents / nodeIds.length)
+  let remainder = totalCents - share * nodeIds.length
+  for (const id of nodeIds) {
+    const cents = share + (remainder > 0 ? 1 : 0)
+    if (remainder > 0) remainder--
+    result.set(id, roundCents(cents / 100))
+  }
+  return result
 }
 
 export interface SplitInput {

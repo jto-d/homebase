@@ -130,6 +130,79 @@ async function carriedBalances({
   return result
 }
 
+/**
+ * Balance through the end of the selected month for every accruing node
+ * (`isSavings` or `rollsOver`) — what the Goals card totals as banked.
+ *
+ * `swept` is a second, independent term on top of whatever `carriedBalances`
+ * already gives a rollover node: a deliberate one-time deposit, never
+ * re-derived from budget-minus-spend, so it can't drift against the replay.
+ * See the rollover-invariant note on `sweepUnspent` in mutations.ts.
+ *
+ * Savings: lifetime contributed + lifetime swept, through `sel` — not
+ * year-scoped like `ytd`, since a goal's progress shouldn't reset every
+ * January. Rollover: `carried` (through the end of the *prior* month) plus
+ * this month's own budget-minus-spend plus lifetime swept.
+ */
+async function bankedBalances({
+  householdId,
+  ownerId,
+  sel,
+  nodes,
+  savings,
+  carriedByNode,
+  thisMonthByNode,
+}: {
+  householdId: string
+  ownerId: string
+  sel: { year: number; month: number }
+  nodes: readonly { id: string; rollsOver: boolean }[]
+  savings: Set<string>
+  carriedByNode: Map<string, number>
+  thisMonthByNode: Map<string, { budget: number; spent: number }>
+}): Promise<{ banked: Map<string, number>; monthSwept: number }> {
+  const accruing = nodes.filter((n) => n.rollsOver || savings.has(n.id))
+  const banked = new Map<string, number>()
+  if (accruing.length === 0) return { banked, monthSwept: 0 }
+
+  const selOrd = monthOrdinal(sel)
+  const rows = await prisma.budgetNodeMonth.findMany({
+    where: {
+      node: { householdId, ownerId },
+      OR: [{ contributed: { not: null } }, { swept: { not: null } }],
+    },
+    select: { nodeId: true, year: true, month: true, contributed: true, swept: true },
+  })
+
+  const contributedByNode = new Map<string, number>()
+  const sweptByNode = new Map<string, number>()
+  let monthSwept = 0
+  for (const row of rows) {
+    const ord = monthOrdinal({ year: row.year, month: row.month })
+    if (ord > selOrd) continue
+    if (row.contributed != null) {
+      contributedByNode.set(row.nodeId, (contributedByNode.get(row.nodeId) ?? 0) + row.contributed.toNumber())
+    }
+    if (row.swept != null) {
+      const amount = row.swept.toNumber()
+      sweptByNode.set(row.nodeId, (sweptByNode.get(row.nodeId) ?? 0) + amount)
+      if (ord === selOrd) monthSwept = roundCents(monthSwept + amount)
+    }
+  }
+
+  for (const node of accruing) {
+    const swept = sweptByNode.get(node.id) ?? 0
+    if (savings.has(node.id)) {
+      banked.set(node.id, roundCents((contributedByNode.get(node.id) ?? 0) + swept))
+    } else {
+      const thisMonth = thisMonthByNode.get(node.id) ?? { budget: 0, spent: 0 }
+      banked.set(node.id, roundCents((carriedByNode.get(node.id) ?? 0) + thisMonth.budget - thisMonth.spent + swept))
+    }
+  }
+
+  return { banked, monthSwept }
+}
+
 builder.queryFields((t) => ({
   /**
    * One person's whole budget for one month.
@@ -196,6 +269,24 @@ builder.queryFields((t) => ({
       const savings = savingsNodeIds(nodes)
       const carriedByNode = await carriedBalances({ householdId, ownerId, sel: { year, month }, nodes, household })
 
+      const thisMonthByNode = new Map(
+        nodes
+          .filter((n) => n.rollsOver)
+          .map((n) => [
+            n.id,
+            { budget: n.months[0]?.budget?.toNumber() ?? 0, spent: spentBy.get(n.id)?.toNumber() ?? 0 },
+          ])
+      )
+      const { banked: bankedByNode, monthSwept } = await bankedBalances({
+        householdId,
+        ownerId,
+        sel: { year, month },
+        nodes,
+        savings,
+        carriedByNode,
+        thisMonthByNode,
+      })
+
       return {
         nodes: nodes.map((node) => {
           const isSavingsNode = savings.has(node.id)
@@ -215,6 +306,8 @@ builder.queryFields((t) => ({
               : (spentBy.get(node.id)?.toNumber() ?? 0),
             ytd: isSavingsNode ? (contributedYtdBy.get(node.id)?.toNumber() ?? 0) : 0,
             carried: carriedByNode.get(node.id) ?? 0,
+            goalTarget: node.goalTarget?.toNumber() ?? null,
+            banked: bankedByNode.get(node.id) ?? 0,
           }
         }),
         income: income.map((source) => ({
@@ -226,6 +319,7 @@ builder.queryFields((t) => ({
         })),
         budgetStartYear: household?.budgetStartYear ?? null,
         budgetStartMonth: household?.budgetStartMonth ?? null,
+        monthSwept,
       }
     },
   }),

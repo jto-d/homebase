@@ -22,6 +22,7 @@ import { useHousehold } from '../household-context'
 import { BudgetedPanel } from './budgeted-panel'
 import { BudgetLedger, type LedgerHandlers } from './budget-ledger'
 import { DeleteNodeDialog, type PendingDelete } from './delete-node-dialog'
+import { GoalsPanel } from './goals-panel'
 import { IncomePanel } from './income-panel'
 import { SummaryStrip } from './summary-strip'
 import {
@@ -38,7 +39,9 @@ import {
   SetNodeAnnualLimitDocument,
   SetNodeBudgetDocument,
   SetNodeContributedDocument,
+  SetNodeGoalDocument,
   SetNodeRolloverDocument,
+  SweepUnspentDocument,
 } from './budget.queries'
 
 type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
@@ -67,6 +70,8 @@ export default function BudgetPage() {
   const [, setAnnualLimit] = useMutation(SetNodeAnnualLimitDocument)
   const [, setContributed] = useMutation(SetNodeContributedDocument)
   const [, setRollover] = useMutation(SetNodeRolloverDocument)
+  const [, setGoal] = useMutation(SetNodeGoalDocument)
+  const [, sweepUnspent] = useMutation(SweepUnspentDocument)
   const [, addIncome] = useMutation(AddIncomeSourceDocument)
   const [, renameIncome] = useMutation(RenameIncomeSourceDocument)
   const [, setIncomeAmount] = useMutation(SetIncomeAmountDocument)
@@ -104,6 +109,7 @@ export default function BudgetPage() {
         budget: overrides[n.id] ?? n.budget,
         annualLimit: overrides[`limit:${n.id}`] ?? n.annualLimit,
         spent: overrides[`spent:${n.id}`] ?? n.spent,
+        goalTarget: overrides[`goal:${n.id}`] ?? n.goalTarget,
       })),
     [month?.nodes, overrides]
   )
@@ -148,6 +154,11 @@ export default function BudgetPage() {
     onRollover: (id, rollsOver) => run(() => setRollover({ id, rollsOver })),
     onToggle: (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] })),
   }
+
+  const onSetGoal = (id: string, target: number | null) =>
+    run(() => setGoal({ id, target }), target != null ? { key: `goal:${id}`, value: target } : undefined)
+  const onSweep = (allocations: { nodeId: string; amount: number }[]) =>
+    run(() => sweepUnspent({ ownerId, ...sel, allocations }))
 
   // The household caps at two, so "the other person" is whoever isn't on screen.
   const viewed = members.find((m) => m.id === ownerId)
@@ -242,6 +253,13 @@ export default function BudgetPage() {
                 onRename={(id, label) => run(() => renameIncome({ id, label }))}
                 onSetAmount={(id, amount) => run(() => setIncomeAmount({ id, amount }), { key: id, value: amount })}
                 onRemove={(id) => run(() => removeIncome({ id }))}
+              />
+              <GoalsPanel
+                nodes={nodes}
+                sel={sel}
+                monthSwept={month?.monthSwept ?? 0}
+                onSetGoal={onSetGoal}
+                onSweep={onSweep}
               />
             </Stack>
           </Box>

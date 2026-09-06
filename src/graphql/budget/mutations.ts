@@ -10,6 +10,10 @@ import {
   budgetLeaves,
   savingsNodeIds,
   monthOrdinal,
+  monthRange,
+  monthLeftover,
+  roundCents,
+  sumMoney,
   toCents,
   type SplitInput,
   type BudgetLeaf,
@@ -18,6 +22,13 @@ import {
 const TransactionSplitInput = builder.inputType('TransactionSplitInput', {
   fields: (t) => ({
     budgetId: t.string({ required: true }),
+    amount: t.float({ required: true }),
+  }),
+})
+
+const SweepAllocationInput = builder.inputType('SweepAllocationInput', {
+  fields: (t) => ({
+    nodeId: t.string({ required: true }),
     amount: t.float({ required: true }),
   }),
 })
@@ -323,6 +334,36 @@ builder.mutationFields((t) => ({
   }),
 
   /**
+   * Pass null to clear the target, dropping the node out of "Goals" back to a
+   * plain accruing fund. Only meaningful on a fund that already accrues —
+   * a resetting category has no balance to draw a bar against.
+   */
+  setNodeGoal: t.boolean({
+    args: { id: t.arg.string({ required: true }), target: t.arg.float() },
+    resolve: async (_root, { id, target }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (target != null && target < 0) throw new UserFacingError('A goal cannot be negative')
+
+      const nodes = await prisma.budgetNode.findMany({
+        where: { householdId },
+        select: { id: true, parentId: true, isSavings: true, rollsOver: true },
+      })
+      const node = nodes.find((n) => n.id === id)
+      if (!node) throw new UserFacingError('Budget not found')
+      if (nodes.some((n) => n.parentId === id)) {
+        throw new UserFacingError('This is calculated from its line items')
+      }
+      if (!node.rollsOver && !savingsNodeIds(nodes).has(id)) {
+        throw new UserFacingError('Only a savings or rollover fund can have a goal')
+      }
+
+      // A zero target would render a bar that is always full; treat it as "none".
+      await prisma.budgetNode.updateMany({ where: { id, householdId }, data: { goalTarget: target || null } })
+      return true
+    },
+  }),
+
+  /**
    * A savings node's transfer for one month — the number the YTD bar sums.
    *
    * A transfer is a fact about that month, not a standing figure.
@@ -407,6 +448,92 @@ builder.mutationFields((t) => ({
       }
 
       await prisma.budgetNode.updateMany({ where: { id, householdId }, data: { rollsOver } })
+      return true
+    },
+  }),
+
+  /**
+   * Move a slice of a month's unspent leftover into one or more accruing funds,
+   * as a one-time deposit (`BudgetNodeMonth.swept`) — never a rewrite of the
+   * source categories' own budget or spend, so a swept month's history stays
+   * exactly what it was.
+   *
+   * No source id: the pool is every non-accruing leaf's unspent for the month
+   * (`monthLeftover`), the same figure the Goals card's footer shows. Only an
+   * accruing node (`isSavings` or `rollsOver`) can be a target — see the
+   * rollover-invariant note on `bankedBalances` for why the two pools never mix.
+   */
+  sweepUnspent: t.boolean({
+    args: {
+      ownerId: t.arg.string({ required: true }),
+      year: t.arg.int({ required: true }),
+      month: t.arg.int({ required: true, description: '1-based: 1 = January.' }),
+      allocations: t.arg({ type: [SweepAllocationInput], required: true }),
+    },
+    resolve: async (_root, { ownerId, year, month, allocations }, ctx) => {
+      const { householdId } = requireAuth(ctx)
+      if (month < 1 || month > 12) throw new UserFacingError('That month does not exist')
+      if (allocations.length === 0) throw new UserFacingError('Choose at least one fund')
+      if (allocations.some((a) => a.amount <= 0)) throw new UserFacingError('Amounts must be positive')
+      await assertMember(householdId, ownerId)
+
+      const nodes = await prisma.budgetNode.findMany({
+        where: { householdId, ownerId },
+        include: { months: { where: { year, month } } },
+      })
+      if (nodes.length === 0) throw new UserFacingError('Budget not found')
+
+      const savings = savingsNodeIds(nodes)
+      const accruing = new Set(nodes.filter((n) => n.rollsOver || savings.has(n.id)).map((n) => n.id))
+      for (const a of allocations) {
+        if (!accruing.has(a.nodeId)) throw new UserFacingError('That fund cannot hold a balance')
+      }
+
+      const [spendRows, alreadySwept, existingRows] = await Promise.all([
+        prisma.transactionSplit.groupBy({
+          by: ['budgetId'],
+          _sum: { amount: true },
+          where: { budget: { householdId, ownerId }, transaction: { date: monthRange({ year, month }) } },
+        }),
+        prisma.budgetNodeMonth.aggregate({
+          _sum: { swept: true },
+          where: { node: { householdId, ownerId }, year, month },
+        }),
+        prisma.budgetNodeMonth.findMany({
+          where: { nodeId: { in: allocations.map((a) => a.nodeId) }, year, month },
+          select: { nodeId: true, swept: true },
+        }),
+      ])
+      const spentBy = new Map(spendRows.map((row) => [row.budgetId, row._sum.amount?.toNumber() ?? 0]))
+      const leftoverNodes = nodes.map((n) => ({
+        id: n.id,
+        parentId: n.parentId,
+        budget: n.months[0]?.budget?.toNumber() ?? 0,
+        spent: spentBy.get(n.id) ?? 0,
+        isSavings: savings.has(n.id),
+        rollsOver: n.rollsOver,
+      }))
+      const pool = monthLeftover(leftoverNodes, alreadySwept._sum.swept?.toNumber() ?? 0)
+
+      const requested = roundCents(sumMoney(allocations, (a) => a.amount))
+      if (requested > pool + 0.001) {
+        throw new UserFacingError(`Only $${pool.toFixed(2)} is unswept this month`)
+      }
+
+      const existingSweptBy = new Map(existingRows.map((r) => [r.nodeId, r.swept?.toNumber() ?? 0]))
+      // ponytail: read-then-write, not a row lock — two confirms in the same
+      // instant could double-count. A two-person household won't race itself;
+      // move to a serializable transaction if that ever changes.
+      await prisma.$transaction(
+        allocations.map((a) => {
+          const swept = roundCents((existingSweptBy.get(a.nodeId) ?? 0) + a.amount)
+          return prisma.budgetNodeMonth.upsert({
+            where: { nodeId_year_month: { nodeId: a.nodeId, year, month } },
+            create: { nodeId: a.nodeId, year, month, swept },
+            update: { swept },
+          })
+        })
+      )
       return true
     },
   }),

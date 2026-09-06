@@ -22,6 +22,8 @@ export const BudgetMonthDocument = graphql(`
         spent
         ytd
         carried
+        goalTarget
+        banked
       }
       income {
         id
@@ -30,6 +32,7 @@ export const BudgetMonthDocument = graphql(`
         amount
         position
       }
+      monthSwept
     }
   }
 `)
@@ -76,6 +79,18 @@ export const SetNodeRolloverDocument = graphql(`
   }
 `)
 
+export const SetNodeGoalDocument = graphql(`
+  mutation SetNodeGoal($id: String!, $target: Float) {
+    setNodeGoal(id: $id, target: $target)
+  }
+`)
+
+export const SweepUnspentDocument = graphql(`
+  mutation SweepUnspent($ownerId: String!, $year: Int!, $month: Int!, $allocations: [SweepAllocationInput!]!) {
+    sweepUnspent(ownerId: $ownerId, year: $year, month: $month, allocations: $allocations)
+  }
+`)
+
 export const AddIncomeSourceDocument = graphql(`
   mutation AddIncomeSource($ownerId: String!, $label: String!, $amount: Float!) {
     addIncomeSource(ownerId: $ownerId, label: $label, amount: $amount)
@@ -109,5 +124,21 @@ export const CopyBudgetFromDocument = graphql(`
 export const CopyBudgetFromLastMonthDocument = graphql(`
   mutation CopyBudgetFromLastMonth($ownerId: String!, $year: Int!, $month: Int!) {
     copyBudgetFromLastMonth(ownerId: $ownerId, year: $year, month: $month)
+  }
+`)
+
+/**
+ * Just enough of the month's transactions to count what's unfiled — the Goals
+ * card's sweep warning. Household-wide like the /transactions page's own count,
+ * since "filed" isn't scoped to a budget owner.
+ */
+export const GoalsUnfiledDocument = graphql(`
+  query GoalsUnfiled($year: Int!, $month: Int!) {
+    transactions(year: $year, month: $month) {
+      id
+      splits {
+        id
+      }
+    }
   }
 `)

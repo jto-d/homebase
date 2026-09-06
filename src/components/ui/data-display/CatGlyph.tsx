@@ -34,6 +34,7 @@ import LocalPharmacyIcon from '@mui/icons-material/LocalPharmacyOutlined'
 import PublicIcon from '@mui/icons-material/PublicOutlined'
 import CategoryIcon from '@mui/icons-material/CategoryOutlined'
 import PercentIcon from '@mui/icons-material/PercentOutlined'
+import FlagIcon from '@mui/icons-material/FlagOutlined'
 import { brand } from '@/lib/theme'
 
 /**
@@ -80,6 +81,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   portal: PublicIcon,
   category: CategoryIcon,
   percent: PercentIcon,
+  flag: FlagIcon,
 }
 
 const TONE_STYLES = {

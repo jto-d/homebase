@@ -70,6 +70,15 @@ export const BudgetNodePayload = builder.simpleObject('BudgetNodePayload', {
     /// Balance through the end of the *previous* month. Zero unless `rollsOver`;
     /// can go negative — overspending one month is a debt against the next.
     carried: t.float(),
+    /// Open-ended target this fund is saving toward, unlike `annualLimit` which
+    /// resets every calendar year. Only meaningful alongside `isSavings` or
+    /// `rollsOver` — see `goalProgress`.
+    goalTarget: t.float({ nullable: true }),
+    /// Balance through the end of the selected month: `carried` plus this
+    /// month's own accrual plus everything ever swept in, for a rollover node;
+    /// lifetime contributed plus swept for a savings node. Zero otherwise. See
+    /// `bankedBalances`.
+    banked: t.float(),
   }),
 })
 
@@ -91,6 +100,9 @@ export const BudgetMonthPayload = builder.simpleObject('BudgetMonthPayload', {
     /// The household's budget start, if one is set — the stepper's back-stop.
     budgetStartYear: t.int({ nullable: true }),
     budgetStartMonth: t.int({ nullable: true }),
+    /// Already swept out of this month's leftover, across every fund — what the
+    /// Goals card's footer nets out so the same dollar can't be swept twice.
+    monthSwept: t.float(),
   }),
 })
 

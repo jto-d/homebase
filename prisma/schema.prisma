@@ -194,6 +194,11 @@ model BudgetNode {
   /// lumpy categories (travel, gifts) that sit near zero then take one big hit.
   /// Unlike `isSavings` this is NOT inherited: it is set per node.
   rollsOver   Boolean  @default(false)
+  /// Set = this fund shows a progress bar toward an open-ended target, unlike
+  /// `annualLimit` which is a per-calendar-year cap. Only meaningful on a node
+  /// that accrues (`isSavings` or `rollsOver`) — a resetting category has no
+  /// balance to measure against.
+  goalTarget  Decimal? @db.Decimal(10, 2)
   createdAt   DateTime @default(now())
 
   householdId String
@@ -227,6 +232,10 @@ model BudgetNodeMonth {
   /// on a savings node, where it *replaces* derived spend rather than adding to
   /// it — see `BudgetNode.isSavings`.
   contributed Decimal? @db.Decimal(10, 2)
+  /// Month-end leftover deliberately moved into this fund. Unlike `contributed`
+  /// it ADDS to the balance rather than replacing derived spend, and it is valid
+  /// on a rollover node as well as a savings one. See `bankedBalances`.
+  swept       Decimal? @db.Decimal(10, 2)
 
   @@unique([nodeId, year, month])
 }

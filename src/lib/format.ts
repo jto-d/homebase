@@ -34,6 +34,15 @@ export function monthLabel(year: number, month: number): string {
   })
 }
 
+/** Short form of `monthLabel`, for a goal's projected finish: "Dec 2026". */
+export function shortMonthLabel(year: number, month: number): string {
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 /** Short date for a list row: "Aug 9". */
 export function fmtDay(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
