@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
+import IconButton from '@mui/material/IconButton'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import Menu from '@mui/material/Menu'
@@ -11,8 +12,16 @@ import Typography from '@mui/material/Typography'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { CaretDownIcon, GearIcon, HouseIcon, SignOutIcon, type Icon } from '@phosphor-icons/react'
+import {
+  CaretDownIcon,
+  GearIcon,
+  HouseIcon,
+  SidebarSimpleIcon,
+  SignOutIcon,
+  type Icon,
+} from '@phosphor-icons/react'
 import { brand } from '@/lib/theme'
+import { useSidebar } from './sidebar-context'
 
 export const V2_SIDEBAR_WIDTH = 232
 
@@ -35,7 +44,7 @@ function WorkspaceMenu() {
           display: 'flex',
           alignItems: 'center',
           gap: 1,
-          width: '100%',
+          minWidth: 0,
           justifyContent: 'flex-start',
           px: 1,
           height: 32,
@@ -61,7 +70,7 @@ function WorkspaceMenu() {
         >
           H
         </Box>
-        <Typography variant="bodyStrong" sx={{ fontSize: 13, fontWeight: 500, flex: 1, textAlign: 'left' }}>
+        <Typography variant="bodyStrong" sx={{ fontSize: 13, fontWeight: 500 }}>
           Homebase
         </Typography>
         <CaretDownIcon size={12} weight="bold" color={brand.zinc[500]} />
@@ -70,6 +79,8 @@ function WorkspaceMenu() {
         anchorEl={anchor}
         open={!!anchor}
         onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{
           paper: { sx: { mt: 0.5, minWidth: 200, borderRadius: '6px', boxShadow: brand.shadow.md, border: '1px solid', borderColor: 'divider' } },
           list: { dense: true },
@@ -94,53 +105,73 @@ function WorkspaceMenu() {
 
 export function V2Sidebar() {
   const pathname = usePathname()
+  const { collapsed, toggle } = useSidebar()
 
   return (
     <Box
-      component="nav"
       sx={{
-        width: V2_SIDEBAR_WIDTH,
+        width: collapsed ? 0 : V2_SIDEBAR_WIDTH,
         flex: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1.5,
-        px: 1,
-        py: 1,
-        height: '100%',
-        bgcolor: brand.zinc[50],
-        borderRight: '1px solid',
-        borderColor: 'divider',
+        overflow: 'hidden',
+        visibility: collapsed ? 'hidden' : 'visible',
+        transition: 'width 150ms ease, visibility 150ms',
       }}
     >
-      <WorkspaceMenu />
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        {NAV_ITEMS.map(({ href, label, icon: NavIcon }) => {
-          const active = isActive(pathname, href)
-          return (
-            <ButtonBase
-              key={href}
-              component={Link}
-              href={href}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                gap: 1.25,
-                px: 1,
-                height: 30,
-                borderRadius: '6px',
-                color: active ? 'text.primary' : 'text.secondary',
-                bgcolor: active ? brand.zinc[200] : 'transparent',
-                '&:hover': { bgcolor: active ? brand.zinc[200] : brand.zinc[100] },
-              }}
-            >
-              <NavIcon size={16} weight="bold" />
-              <Typography variant="body" sx={{ fontSize: 13, fontWeight: 500, color: 'inherit' }}>
-                {label}
-              </Typography>
-            </ButtonBase>
-          )
-        })}
+      <Box
+        component="nav"
+        sx={{
+          width: V2_SIDEBAR_WIDTH,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          px: 1,
+          py: 1,
+          height: '100vh',
+          bgcolor: brand.zinc[50],
+          borderRight: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
+          <WorkspaceMenu />
+          <IconButton
+            size="small"
+            onClick={toggle}
+            aria-label="Collapse sidebar"
+            sx={{ borderRadius: '6px', color: brand.zinc[500], flex: 'none' }}
+          >
+            <SidebarSimpleIcon size={16} weight="bold" />
+          </IconButton>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {NAV_ITEMS.map(({ href, label, icon: NavIcon }) => {
+            const active = isActive(pathname, href)
+            return (
+              <ButtonBase
+                key={href}
+                component={Link}
+                href={href}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  gap: 1.25,
+                  px: 1,
+                  height: 30,
+                  borderRadius: '6px',
+                  color: active ? 'text.primary' : 'text.secondary',
+                  bgcolor: active ? brand.zinc[200] : 'transparent',
+                  '&:hover': { bgcolor: active ? brand.zinc[200] : brand.zinc[100] },
+                }}
+              >
+                <NavIcon size={16} weight="bold" />
+                <Typography variant="body" sx={{ fontSize: 13, fontWeight: 500, color: 'inherit' }}>
+                  {label}
+                </Typography>
+              </ButtonBase>
+            )
+          })}
+        </Box>
       </Box>
     </Box>
   )
