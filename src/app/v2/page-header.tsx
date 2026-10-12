@@ -27,6 +27,7 @@ export function PageHeader({ title, actions }: { title: string; actions?: React.
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         {collapsed && (
           <IconButton
+            disableRipple
             size="small"
             onClick={toggle}
             aria-label="Expand sidebar"

@@ -39,6 +39,7 @@ function WorkspaceMenu() {
   return (
     <>
       <ButtonBase
+        disableRipple
         onClick={(e) => setAnchor(e.currentTarget)}
         sx={{
           display: 'flex',
@@ -86,13 +87,13 @@ function WorkspaceMenu() {
           list: { dense: true },
         }}
       >
-        <MenuItem component={Link} href="/v2/settings" onClick={() => setAnchor(null)}>
+        <MenuItem disableRipple component={Link} href="/v2/settings" onClick={() => setAnchor(null)}>
           <ListItemIcon>
             <GearIcon size={16} weight="bold" />
           </ListItemIcon>
           <ListItemText slotProps={{ primary: { sx: { fontSize: 13, fontWeight: 500 } } }}>Settings</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => signOut({ callbackUrl: '/login' })}>
+        <MenuItem disableRipple onClick={() => signOut({ callbackUrl: '/login' })}>
           <ListItemIcon>
             <SignOutIcon size={16} weight="bold" />
           </ListItemIcon>
@@ -135,6 +136,7 @@ export function V2Sidebar() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
           <WorkspaceMenu />
           <IconButton
+            disableRipple
             size="small"
             onClick={toggle}
             aria-label="Collapse sidebar"
@@ -148,6 +150,7 @@ export function V2Sidebar() {
             const active = isActive(pathname, href)
             return (
               <ButtonBase
+                disableRipple
                 key={href}
                 component={Link}
                 href={href}
