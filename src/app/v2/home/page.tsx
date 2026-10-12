@@ -1,5 +1,5 @@
-import Typography from '@mui/material/Typography'
+import { PageHeader } from '../page-header'
 
 export default function V2HomePage() {
-  return <Typography>home</Typography>
+  return <PageHeader title="Home" />
 }
