@@ -23,6 +23,7 @@
     "@mui/material": "^9.0.1",
     "@mui/material-nextjs": "^9.0.1",
     "@neondatabase/serverless": "^1.1.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@pothos/core": "^4.12.0",
     "@pothos/plugin-prisma": "^4.14.3",
     "@pothos/plugin-simple-objects": "^4.1.3",
