@@ -18,7 +18,7 @@ export function PageHeader({ title, actions }: { title: string; actions?: React.
         borderColor: 'divider',
       }}
     >
-      <Typography variant="bodyStrong" sx={{ fontSize: 13 }} noWrap>
+      <Typography variant="bodyStrong" sx={{ fontSize: 13, fontWeight: 500 }} noWrap>
         {title}
       </Typography>
       {actions && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>{actions}</Box>}

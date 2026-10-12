@@ -39,7 +39,7 @@ function WorkspaceMenu() {
           justifyContent: 'flex-start',
           px: 1,
           height: 32,
-          borderRadius: '4px',
+          borderRadius: '6px',
           '&:hover, &[aria-expanded="true"]': { bgcolor: brand.zinc[200] },
         }}
         aria-haspopup="menu"
@@ -49,7 +49,7 @@ function WorkspaceMenu() {
           sx={{
             width: 20,
             height: 20,
-            borderRadius: '5px',
+            borderRadius: '6px',
             bgcolor: brand.teal[600],
             color: '#fff',
             display: 'grid',
@@ -61,7 +61,7 @@ function WorkspaceMenu() {
         >
           H
         </Box>
-        <Typography variant="bodyStrong" sx={{ fontSize: 13, flex: 1, textAlign: 'left' }}>
+        <Typography variant="bodyStrong" sx={{ fontSize: 13, fontWeight: 500, flex: 1, textAlign: 'left' }}>
           Homebase
         </Typography>
         <CaretDownIcon size={12} weight="bold" color={brand.zinc[500]} />
@@ -77,13 +77,13 @@ function WorkspaceMenu() {
       >
         <MenuItem component={Link} href="/v2/settings" onClick={() => setAnchor(null)}>
           <ListItemIcon>
-            <GearIcon size={16} />
+            <GearIcon size={16} weight="bold" />
           </ListItemIcon>
           <ListItemText slotProps={{ primary: { sx: { fontSize: 13, fontWeight: 500 } } }}>Settings</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => signOut({ callbackUrl: '/login' })}>
           <ListItemIcon>
-            <SignOutIcon size={16} />
+            <SignOutIcon size={16} weight="bold" />
           </ListItemIcon>
           <ListItemText slotProps={{ primary: { sx: { fontSize: 13, fontWeight: 500 } } }}>Log out</ListItemText>
         </MenuItem>
@@ -113,7 +113,7 @@ export function V2Sidebar() {
       }}
     >
       <WorkspaceMenu />
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {NAV_ITEMS.map(({ href, label, icon: NavIcon }) => {
           const active = isActive(pathname, href)
           return (
@@ -128,14 +128,14 @@ export function V2Sidebar() {
                 gap: 1.25,
                 px: 1,
                 height: 30,
-                borderRadius: '4px',
+                borderRadius: '6px',
                 color: active ? 'text.primary' : 'text.secondary',
                 bgcolor: active ? brand.zinc[200] : 'transparent',
                 '&:hover': { bgcolor: active ? brand.zinc[200] : brand.zinc[100] },
               }}
             >
-              <NavIcon size={16} weight={active ? 'fill' : 'regular'} />
-              <Typography variant="body" sx={{ fontSize: 13, fontWeight: active ? 600 : 500, color: 'inherit' }}>
+              <NavIcon size={16} weight="bold" />
+              <Typography variant="body" sx={{ fontSize: 13, fontWeight: 500, color: 'inherit' }}>
                 {label}
               </Typography>
             </ButtonBase>
