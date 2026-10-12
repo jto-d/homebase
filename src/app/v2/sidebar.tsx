@@ -140,7 +140,7 @@ export function V2Sidebar() {
             size="small"
             onClick={toggle}
             aria-label="Collapse sidebar"
-            sx={{ borderRadius: '6px', color: brand.zinc[500], flex: 'none' }}
+            sx={{ borderRadius: '6px', color: brand.zinc[500], flex: 'none', '&:hover': { bgcolor: brand.zinc[200], color: brand.zinc[900] } }}
           >
             <SidebarSimpleIcon size={16} weight="bold" />
           </IconButton>

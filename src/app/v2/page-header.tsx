@@ -31,7 +31,7 @@ export function PageHeader({ title, actions }: { title: string; actions?: React.
             size="small"
             onClick={toggle}
             aria-label="Expand sidebar"
-            sx={{ borderRadius: '6px', color: brand.zinc[500], ml: -0.75 }}
+            sx={{ borderRadius: '6px', color: brand.zinc[500], ml: -0.75, '&:hover': { bgcolor: brand.zinc[100], color: brand.zinc[900] } }}
           >
             <SidebarSimpleIcon size={16} weight="bold" />
           </IconButton>
