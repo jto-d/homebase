@@ -13,11 +13,18 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
+  ArrowsClockwiseIcon,
+  ArrowsLeftRightIcon,
+  BankIcon,
   CaretDownIcon,
+  ChartPieSliceIcon,
+  CoinsIcon,
   GearIcon,
   HouseIcon,
+  ReceiptIcon,
   SidebarSimpleIcon,
   SignOutIcon,
+  WalletIcon,
   type Icon,
 } from '@phosphor-icons/react'
 import { brand } from '@/lib/theme'
@@ -27,6 +34,13 @@ export const V2_SIDEBAR_WIDTH = 232
 
 const NAV_ITEMS: { href: string; label: string; icon: Icon }[] = [
   { href: '/v2/home', label: 'Home', icon: HouseIcon },
+  { href: '/v2/budget', label: 'Budget', icon: ChartPieSliceIcon },
+  { href: '/v2/transactions', label: 'Transactions', icon: ArrowsLeftRightIcon },
+  { href: '/v2/accounts', label: 'Accounts', icon: BankIcon },
+  { href: '/v2/split', label: 'Split', icon: ReceiptIcon },
+  { href: '/v2/subscriptions', label: 'Subscriptions', icon: ArrowsClockwiseIcon },
+  { href: '/v2/wallet', label: 'Wallet', icon: WalletIcon },
+  { href: '/v2/points', label: 'Points', icon: CoinsIcon },
 ]
 
 function isActive(pathname: string, href: string): boolean {
