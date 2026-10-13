@@ -1,4 +1,7 @@
+export { Button } from './Button'
+export { Dialog } from './Dialog'
 export { IconButton } from './IconButton'
 export { Menu } from './Menu'
 export { Stack } from './Stack'
+export { Text } from './Text'
 export { buttonReset, color, focusRing, radius, shadow } from './tokens'

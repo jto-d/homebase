@@ -2,7 +2,7 @@
 
 import styled from '@emotion/styled'
 import { SidebarSimpleIcon } from '@phosphor-icons/react'
-import { color, IconButton, Stack } from '@/components/v2'
+import { color, IconButton, Stack, Text } from '@/components/v2'
 import { useSidebar } from './sidebar-context'
 
 const Bar = styled.header({
@@ -18,13 +18,7 @@ const Bar = styled.header({
 
 const Group = styled(Stack)({ minWidth: 0 })
 
-const Title = styled.h1({
-  margin: 0,
-  fontSize: 13,
-  fontWeight: 500,
-  lineHeight: 1.4,
-  letterSpacing: '-0.005em',
-  color: color.text,
+const Title = styled(Text)({
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -43,7 +37,9 @@ export function PageHeader({ title, actions }: { title: string; actions?: React.
             <SidebarSimpleIcon size={16} weight="bold" />
           </ExpandButton>
         )}
-        <Title>{title}</Title>
+        <Title as="h1" variant="strong">
+          {title}
+        </Title>
       </Group>
       {actions && (
         <Group direction="row" align="center" gap={8}>
