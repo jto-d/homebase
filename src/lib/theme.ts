@@ -103,6 +103,7 @@ export const theme = createTheme({
   },
   shape: { borderRadius: 11 },
   typography: {
+    fontFamily: 'var(--font-inter), Inter, system-ui, sans-serif',
     h1: { fontWeight: 600, letterSpacing: '-0.03em' },
     h2: { fontWeight: 600, letterSpacing: '-0.025em' },
     h3: { fontWeight: 600, letterSpacing: '-0.02em' },
