@@ -1,14 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import Box from '@mui/material/Box'
-import ButtonBase from '@mui/material/ButtonBase'
-import IconButton from '@mui/material/IconButton'
-import ListItemIcon from '@mui/material/ListItemIcon'
-import ListItemText from '@mui/material/ListItemText'
-import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import Typography from '@mui/material/Typography'
+import styled from '@emotion/styled'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -27,7 +19,7 @@ import {
   WalletIcon,
   type Icon,
 } from '@phosphor-icons/react'
-import { brand } from '@/lib/theme'
+import { buttonReset, color, focusRing, IconButton, Menu, radius, Stack } from '@/components/v2'
 import { useSidebar } from './sidebar-context'
 
 export const V2_SIDEBAR_WIDTH = 232
@@ -47,74 +39,95 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + '/')
 }
 
-function WorkspaceMenu() {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+const Rail = styled.div({
+  width: V2_SIDEBAR_WIDTH,
+  flex: 'none',
+  overflow: 'hidden',
+  transition: 'width 150ms ease, visibility 150ms',
+  '&[data-collapsed]': { width: 0, visibility: 'hidden' },
+})
 
+const Nav = styled.nav({
+  width: V2_SIDEBAR_WIDTH,
+  height: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  padding: 8,
+  backgroundColor: color.surfaceSunken,
+  borderRight: `1px solid ${color.border}`,
+})
+
+const WorkspaceTrigger = styled(Menu.Trigger)({
+  ...buttonReset,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  minWidth: 0,
+  height: 32,
+  padding: '0 8px',
+  borderRadius: radius.md,
+  fontSize: 13,
+  fontWeight: 500,
+  letterSpacing: '-0.005em',
+  color: color.text,
+  '&:hover, &[data-popup-open]': { backgroundColor: color.selected },
+})
+
+const WorkspaceBadge = styled.span({
+  display: 'grid',
+  placeItems: 'center',
+  flex: 'none',
+  width: 20,
+  height: 20,
+  borderRadius: radius.md,
+  backgroundColor: color.accent,
+  color: '#fff',
+  fontSize: 11,
+  fontWeight: 700,
+})
+
+const CollapseButton = styled(IconButton)({
+  '&:hover': { backgroundColor: color.selected },
+})
+
+const NavItem = styled(Link)({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  height: 30,
+  padding: '0 8px',
+  borderRadius: radius.md,
+  fontSize: 13,
+  fontWeight: 500,
+  lineHeight: 1.45,
+  color: color.textMuted,
+  textDecoration: 'none',
+  outline: 0,
+  ...focusRing,
+  '&:hover': { backgroundColor: color.hover },
+  '&[aria-current="page"]': { color: color.text, backgroundColor: color.selected },
+})
+
+function WorkspaceMenu() {
   return (
-    <>
-      <ButtonBase
-        disableRipple
-        onClick={(e) => setAnchor(e.currentTarget)}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          minWidth: 0,
-          justifyContent: 'flex-start',
-          px: 1,
-          height: 32,
-          borderRadius: '6px',
-          '&:hover, &[aria-expanded="true"]': { bgcolor: brand.zinc[200] },
-        }}
-        aria-haspopup="menu"
-        aria-expanded={anchor ? 'true' : undefined}
-      >
-        <Box
-          sx={{
-            width: 20,
-            height: 20,
-            borderRadius: '6px',
-            bgcolor: brand.teal[600],
-            color: '#fff',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 11,
-            fontWeight: 700,
-            flex: 'none',
-          }}
-        >
-          H
-        </Box>
-        <Typography variant="bodyStrong" sx={{ fontSize: 13, fontWeight: 500 }}>
-          Homebase
-        </Typography>
-        <CaretDownIcon size={12} weight="bold" color={brand.zinc[500]} />
-      </ButtonBase>
-      <Menu
-        anchorEl={anchor}
-        open={!!anchor}
-        onClose={() => setAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{
-          paper: { sx: { mt: 0.5, minWidth: 200, borderRadius: '6px', boxShadow: brand.shadow.md, border: '1px solid', borderColor: 'divider' } },
-          list: { dense: true },
-        }}
-      >
-        <MenuItem disableRipple component={Link} href="/v2/settings" onClick={() => setAnchor(null)}>
-          <ListItemIcon>
-            <GearIcon size={16} weight="bold" />
-          </ListItemIcon>
-          <ListItemText slotProps={{ primary: { sx: { fontSize: 13, fontWeight: 500 } } }}>Settings</ListItemText>
-        </MenuItem>
-        <MenuItem disableRipple onClick={() => signOut({ callbackUrl: '/login' })}>
-          <ListItemIcon>
-            <SignOutIcon size={16} weight="bold" />
-          </ListItemIcon>
-          <ListItemText slotProps={{ primary: { sx: { fontSize: 13, fontWeight: 500 } } }}>Log out</ListItemText>
-        </MenuItem>
-      </Menu>
-    </>
+    <Menu.Root>
+      <WorkspaceTrigger>
+        <WorkspaceBadge>H</WorkspaceBadge>
+        Homebase
+        <CaretDownIcon size={12} weight="bold" color={color.icon} />
+      </WorkspaceTrigger>
+      <Menu.Popup>
+        <Menu.LinkItem closeOnClick render={<Link href="/v2/settings" />}>
+          <GearIcon size={16} weight="bold" />
+          Settings
+        </Menu.LinkItem>
+        <Menu.Item onClick={() => signOut({ callbackUrl: '/login' })}>
+          <SignOutIcon size={16} weight="bold" />
+          Log out
+        </Menu.Item>
+      </Menu.Popup>
+    </Menu.Root>
   )
 }
 
@@ -123,73 +136,23 @@ export function V2Sidebar() {
   const { collapsed, toggle } = useSidebar()
 
   return (
-    <Box
-      sx={{
-        width: collapsed ? 0 : V2_SIDEBAR_WIDTH,
-        flex: 'none',
-        overflow: 'hidden',
-        visibility: collapsed ? 'hidden' : 'visible',
-        transition: 'width 150ms ease, visibility 150ms',
-      }}
-    >
-      <Box
-        component="nav"
-        sx={{
-          width: V2_SIDEBAR_WIDTH,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          px: 1,
-          py: 1,
-          height: '100vh',
-          bgcolor: brand.zinc[50],
-          borderRight: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
+    <Rail data-collapsed={collapsed || undefined}>
+      <Nav>
+        <Stack direction="row" align="center" justify="space-between" gap={4}>
           <WorkspaceMenu />
-          <IconButton
-            disableRipple
-            size="small"
-            onClick={toggle}
-            aria-label="Collapse sidebar"
-            sx={{ borderRadius: '6px', color: brand.zinc[500], flex: 'none', '&:hover': { bgcolor: brand.zinc[200], color: brand.zinc[900] } }}
-          >
+          <CollapseButton onClick={toggle} aria-label="Collapse sidebar">
             <SidebarSimpleIcon size={16} weight="bold" />
-          </IconButton>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {NAV_ITEMS.map(({ href, label, icon: NavIcon }) => {
-            const active = isActive(pathname, href)
-            return (
-              <ButtonBase
-                disableRipple
-                key={href}
-                component={Link}
-                href={href}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  gap: 1.25,
-                  px: 1,
-                  height: 30,
-                  borderRadius: '6px',
-                  color: active ? 'text.primary' : 'text.secondary',
-                  bgcolor: active ? brand.zinc[200] : 'transparent',
-                  '&:hover': { bgcolor: active ? brand.zinc[200] : brand.zinc[100] },
-                }}
-              >
-                <NavIcon size={16} weight="bold" />
-                <Typography variant="body" sx={{ fontSize: 13, fontWeight: 500, color: 'inherit' }}>
-                  {label}
-                </Typography>
-              </ButtonBase>
-            )
-          })}
-        </Box>
-      </Box>
-    </Box>
+          </CollapseButton>
+        </Stack>
+        <Stack gap={4}>
+          {NAV_ITEMS.map(({ href, label, icon: NavIcon }) => (
+            <NavItem key={href} href={href} aria-current={isActive(pathname, href) ? 'page' : undefined}>
+              <NavIcon size={16} weight="bold" />
+              {label}
+            </NavItem>
+          ))}
+        </Stack>
+      </Nav>
+    </Rail>
   )
 }
