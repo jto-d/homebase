@@ -6,7 +6,7 @@ import styled from '@emotion/styled'
 import { brand } from '@/lib/theme'
 import { buttonReset, color, radius } from './tokens'
 
-type Variant = 'primary' | 'subtle'
+type Variant = 'primary' | 'subtle' | 'outline'
 
 const VARIANTS: Record<Variant, CSSObject> = {
   primary: {
@@ -19,6 +19,13 @@ const VARIANTS: Record<Variant, CSSObject> = {
     backgroundColor: 'transparent',
     color: color.textMuted,
     '&:hover:not([data-disabled])': { backgroundColor: color.hover, color: color.text },
+    '&:active:not([data-disabled])': { backgroundColor: color.selected },
+  },
+  outline: {
+    backgroundColor: color.surface,
+    color: color.text,
+    border: `1px solid ${color.border}`,
+    '&:hover:not([data-disabled])': { backgroundColor: color.hover },
     '&:active:not([data-disabled])': { backgroundColor: color.selected },
   },
 }
