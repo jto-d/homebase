@@ -1,5 +1,6 @@
 export { Button } from './Button'
 export { Collapsible } from './Collapsible'
+export { Count } from './Count'
 export { Dialog } from './Dialog'
 export { IconButton } from './IconButton'
 export { Menu } from './Menu'

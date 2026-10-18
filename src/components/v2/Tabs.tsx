@@ -2,6 +2,7 @@
 
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import styled from '@emotion/styled'
+import { Count as BaseCount } from './Count'
 import { buttonReset, color } from './tokens'
 
 const List = styled(BaseTabs.List)({
@@ -39,18 +40,7 @@ const Indicator = styled(BaseTabs.Indicator)({
   transition: 'translate 150ms ease, width 150ms ease',
 })
 
-const Count = styled.span({
-  display: 'inline-grid',
-  placeItems: 'center',
-  minWidth: 18,
-  height: 18,
-  padding: '0 5px',
-  borderRadius: 4,
-  backgroundColor: color.hover,
-  color: color.textMuted,
-  fontSize: 11,
-  fontWeight: 600,
-  fontVariantNumeric: 'tabular-nums',
+const Count = styled(BaseCount)({
   '[data-active] > &': { backgroundColor: color.selected, color: color.text },
 })
 

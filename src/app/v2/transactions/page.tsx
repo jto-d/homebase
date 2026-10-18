@@ -6,7 +6,7 @@ import { CaretRightIcon, FunnelSimpleIcon, PlusIcon, BankIcon } from '@phosphor-
 import {
   Button,
   Collapsible,
-  color,
+  Count,
   currentMonth,
   MonthStepper,
   Stack,
@@ -38,20 +38,6 @@ const List = styled.div({
   flex: 1,
   minHeight: 0,
   overflow: 'auto',
-})
-
-const Count = styled.span({
-  display: 'inline-grid',
-  placeItems: 'center',
-  minWidth: 18,
-  height: 18,
-  padding: '0 5px',
-  borderRadius: 4,
-  backgroundColor: color.hover,
-  color: color.textMuted,
-  fontSize: 11,
-  fontWeight: 600,
-  fontVariantNumeric: 'tabular-nums',
 })
 
 const Empty = styled.div({
