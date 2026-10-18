@@ -16,7 +16,7 @@ const Bar = styled.header({
   borderBottom: `1px solid ${color.border}`,
 })
 
-const Group = styled(Stack)({ minWidth: 0 })
+const Group = styled(Stack)({ minWidth: 0, alignSelf: 'stretch' })
 
 const Title = styled(Text)({
   whiteSpace: 'nowrap',
@@ -26,7 +26,18 @@ const Title = styled(Text)({
 
 const ExpandButton = styled(IconButton)({ marginLeft: -6 })
 
-export function PageHeader({ title, actions }: { title: string; actions?: React.ReactNode }) {
+// Stretches to the bar's full height so a Tabs indicator sits on the bottom border.
+const Nav = styled.div({ height: '100%', marginLeft: 8 })
+
+export function PageHeader({
+  title,
+  tabs,
+  actions,
+}: {
+  title: string
+  tabs?: React.ReactNode
+  actions?: React.ReactNode
+}) {
   const { collapsed, toggle } = useSidebar()
 
   return (
@@ -40,6 +51,7 @@ export function PageHeader({ title, actions }: { title: string; actions?: React.
         <Title as="h1" variant="strong">
           {title}
         </Title>
+        {tabs && <Nav>{tabs}</Nav>}
       </Group>
       {actions && (
         <Group direction="row" align="center" gap={8}>
