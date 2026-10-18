@@ -11,6 +11,7 @@ import { fmtDollars, fmtSigned, monthLabel } from '@/lib/format'
 import { BudgetMonthDocument } from '../../(app)/budget/budget.queries'
 import { HouseholdDocument } from '../../(app)/household.queries'
 import { PageHeader } from '../page-header'
+import { PlanChart } from './plan-chart'
 
 const Page = styled.div({
   display: 'flex',
@@ -23,7 +24,20 @@ const List = styled.div({
   flex: 1,
   minHeight: 0,
   overflow: 'auto',
-  paddingTop: 8,
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
+  alignItems: 'start',
+  gap: 8,
+  padding: '8px 16px 16px 0',
+  '@media (max-width: 900px)': { gridTemplateColumns: 'minmax(0, 1fr)', paddingLeft: 16 },
+})
+
+const Islands = styled.aside({
+  position: 'sticky',
+  top: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
 })
 
 // Same inset as Collapsible.Root + Trigger, so header, rows and footer share columns.
@@ -168,21 +182,26 @@ export default function V2BudgetPage() {
         )}
         {data && (
           <>
-            <Head indent={20}>
-              <Label>Category</Label>
-              <Num tone="muted">Budget</Num>
-              <Num tone="muted">Spent</Num>
-              <Num tone="muted">Left</Num>
-            </Head>
-            {roots.map((group) => (
-              <Group key={group.id} group={group} />
-            ))}
-            <Footer indent={20}>
-              <Label>Total budgeted</Label>
-              <Num>{fmtDollars(budgeted)}</Num>
-              <Num>{fmtDollars(spent)}</Num>
-              <Num tone={left < 0 ? 'over' : undefined}>{fmtSigned(left)}</Num>
-            </Footer>
+            <div>
+              <Head indent={20}>
+                <Label>Category</Label>
+                <Num tone="muted">Budget</Num>
+                <Num tone="muted">Spent</Num>
+                <Num tone="muted">Left</Num>
+              </Head>
+              {roots.map((group) => (
+                <Group key={group.id} group={group} />
+              ))}
+              <Footer indent={20}>
+                <Label>Total budgeted</Label>
+                <Num>{fmtDollars(budgeted)}</Num>
+                <Num>{fmtDollars(spent)}</Num>
+                <Num tone={left < 0 ? 'over' : undefined}>{fmtSigned(left)}</Num>
+              </Footer>
+            </div>
+            <Islands>
+              <PlanChart roots={roots} />
+            </Islands>
           </>
         )}
       </List>
