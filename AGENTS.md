@@ -243,6 +243,20 @@ is just a number the household types in and keeps current.
   as the ledger write — there is no reconciliation step, so a mutation that touches one without the
   other leaves the balance permanently wrong.
 
+## v2 — no GraphQL
+
+`src/app/v2/` is the redesign, and it never touches GraphQL: no urql, no `@/gql`, no `*.queries.ts`
+imports. When v1 is deleted, GraphQL goes with it.
+
+- Pages are async server components that read state (month, member) from `searchParams` and pass
+  plain data to a client view in `_components/`.
+- Reads go through gated `get*` functions in `src/server/` that call `requireHousehold()`
+  (`src/server/session.ts`) themselves — never rely on the layout redirect, which doesn't re-run on
+  navigation or guard server actions.
+- Logic v1 also needs is **moved, not copied**: the body lives in `src/server/<domain>.ts` taking
+  `householdId` (e.g. `budgetMonth`), the GraphQL resolver becomes `requireAuth(ctx)` + a call,
+  and v2 calls it through its `get*` wrapper.
+
 ## urql client
 
 `src/lib/urql.tsx` (`Providers`) is the only urql wiring; every consumer is a client component.
