@@ -486,3 +486,21 @@ export async function replaceSplits(
     data: splits.map((s) => ({ transactionId, budgetId: s.budgetId, amount: s.amount })),
   })
 }
+
+/**
+ * The month a v2 page's `?y=&m=` asks for, or the current one when they're
+ * missing or junk.
+ *
+ * ponytail: runs on the server, so the fallback is the server's clock — for a few
+ * hours around midnight on the 1st it can disagree with the viewer's. Have the
+ * client replace the URL with its own month if that ever bites.
+ */
+export function monthFromParams(y: unknown, m: unknown): MonthSel {
+  const year = Number(y)
+  const month = Number(m)
+  if (Number.isInteger(year) && Number.isInteger(month) && year > 0 && month >= 1 && month <= 12) {
+    return { year, month }
+  }
+  const now = new Date()
+  return { year: now.getFullYear(), month: now.getMonth() + 1 }
+}

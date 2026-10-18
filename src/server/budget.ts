@@ -1,11 +1,11 @@
 /**
  * Budget reads shared by the GraphQL resolvers (v1) and the v2 server components.
  *
- * `budgetMonth` takes `householdId` and does no auth of its own — callers gate
- * first: `requireAuth(ctx)` in the resolver, `getBudgetMonth` for v2.
+ * Functions taking `householdId` do no auth of their own — callers gate first:
+ * `requireAuth(ctx)` in a resolver, a `get*` wrapper (or `requireHousehold()`) in v2.
  */
 import { prisma } from '@/lib/prisma'
-import { monthRange, monthOrdinal, roundCents, rentNodeIds, savingsNodeIds } from '@/lib/budget'
+import { monthRange, monthOrdinal, roundCents, rentNodeIds, savingsNodeIds, budgetLeaves } from '@/lib/budget'
 import { DEFAULT_GROUPS, DEFAULT_INCOME } from '@/lib/budgetDefaults'
 import { UserFacingError } from '@/lib/errors'
 import { requireHousehold } from './session'
@@ -343,6 +343,19 @@ export async function budgetMonth(
 }
 
 export type BudgetMonth = Awaited<ReturnType<typeof budgetMonth>>
+
+/**
+ * Everything a transaction can be filed into, across both members — leaves only,
+ * each with its full path (`"Food › Groceries"`), since both people can have a "Gas".
+ */
+export async function fileableLeaves(householdId: string) {
+  const nodes = await prisma.budgetNode.findMany({
+    where: { householdId },
+    select: { id: true, label: true, parentId: true, ownerId: true, isSavings: true },
+    orderBy: { position: 'asc' },
+  })
+  return budgetLeaves(nodes)
+}
 
 /** v2 entry point: the viewer's household, gated. */
 export async function getBudgetMonth(args: { year: number; month: number; ownerId: string }) {
