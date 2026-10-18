@@ -28,8 +28,8 @@ const List = styled.div({
   gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
   alignItems: 'start',
   gap: 8,
-  padding: '8px 16px 16px 0',
-  '@media (max-width: 900px)': { gridTemplateColumns: 'minmax(0, 1fr)', paddingLeft: 16 },
+  padding: '8px 8px 16px 0',
+  '@media (max-width: 900px)': { gridTemplateColumns: 'minmax(0, 1fr)', paddingLeft: 8 },
 })
 
 const Islands = styled.aside({
