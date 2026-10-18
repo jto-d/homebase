@@ -1,5 +1,17 @@
 {
   "worktree": {
     "bgIsolation": "none"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" || exit 0; grep -Eq '\"stop_hook_active\": ?true' && exit 0; [ -z \"$(git status --porcelain)\" ] && exit 0; h=$( (git diff HEAD; git ls-files --others --exclude-standard) | shasum | cut -c1-40); [ \"$h\" = \"$(cat .git/ponytail-reviewed 2>/dev/null)\" ] && exit 0; echo \"$h\" > .git/ponytail-reviewed; echo '{\"decision\":\"block\",\"reason\":\"Code changed. Invoke the ponytail:ponytail-review skill on the uncommitted diff, apply every finding that does not change behavior, then run pnpm build.\"}'"
+          }
+        ]
+      }
+    ]
   }
 }
