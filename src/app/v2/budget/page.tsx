@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { useQuery } from '@urql/next'
 import styled from '@emotion/styled'
-import { CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react'
+import { CaretLeftIcon, CaretRightIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { brand } from '@/lib/theme'
-import { Collapsible, color, Count, currentMonth, IconButton, step, Tabs, Text, type MonthSel } from '@/components/v2'
+import { Collapsible, color, Count, radius, currentMonth, IconButton, step, Tabs, Text, type MonthSel } from '@/components/v2'
 import { buildBudgetTree, type BudgetTreeNode } from '@/lib/budget'
 import { fmtDollars, fmtSigned, monthLabel } from '@/lib/format'
 import { BudgetMonthDocument } from '../../(app)/budget/budget.queries'
@@ -75,6 +75,46 @@ const Footer = styled(Line)({
   borderTop: `1px solid ${color.border}`,
   fontWeight: 600,
 })
+
+// Same shell as the Plan island; only the icon carries the tone.
+const Banner = styled.div({
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 10,
+  padding: '12px 16px',
+  borderRadius: radius.md * 2,
+  border: `1px solid ${color.border}`,
+  backgroundColor: color.surface,
+})
+
+const BannerText = styled.div({ display: 'flex', flexDirection: 'column', gap: 2 })
+
+// Budget should equal income (zero-based). No income entered = nothing to compare against.
+function IncomeBanner({ income, budgeted }: { income: number; budgeted: number }) {
+  const gap = income - budgeted
+  if (income <= 0 || Math.abs(gap) < 0.01) return null
+  const over = gap < 0
+  return (
+    <Banner role="status">
+      <WarningCircleIcon
+        size={16}
+        weight="fill"
+        color={over ? brand.amber[700] : color.accent}
+        style={{ flex: 'none', marginTop: 1 }}
+      />
+      <BannerText>
+        <Text variant="strong">
+          {over ? `Budget is ${fmtDollars(-gap)} over income` : `${fmtDollars(gap)} of income unassigned`}
+        </Text>
+        <Text variant="label">
+          {over
+            ? 'Trim a few categories so your plan fits what’s coming in.'
+            : 'Give it a job — add it to a category or savings.'}
+        </Text>
+      </BannerText>
+    </Banner>
+  )
+}
 
 const Empty = styled.div({ padding: '8px 8px 12px 28px' })
 
@@ -200,6 +240,7 @@ export default function V2BudgetPage() {
               </Footer>
             </div>
             <Islands>
+              <IncomeBanner income={data.budgetMonth.income.reduce((s, i) => s + i.amount, 0)} budgeted={budgeted} />
               <PlanChart roots={roots} />
             </Islands>
           </>
