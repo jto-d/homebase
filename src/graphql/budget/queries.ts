@@ -2,7 +2,7 @@ import { builder } from '../builder'
 import { requireAuth } from '../context'
 import { BudgetLeafPayload, BudgetMonthPayload } from './type'
 import { prisma } from '@/lib/prisma'
-import { monthRange, monthOrdinal, roundCents, budgetLeaves, savingsNodeIds } from '@/lib/budget'
+import { monthRange, monthOrdinal, roundCents, budgetLeaves, rentNodeIds, savingsNodeIds } from '@/lib/budget'
 import { DEFAULT_GROUPS, DEFAULT_INCOME } from '@/lib/budgetDefaults'
 import { UserFacingError } from '@/lib/errors'
 
@@ -234,7 +234,9 @@ builder.queryFields((t) => ({
 
       await seedIfEmpty(householdId, ownerId)
 
-      const [nodes, income, household, monthSpend, ytdContributed] = await Promise.all([
+      const range = monthRange({ year, month })
+      const lastMonthStart = new Date(Date.UTC(year, month - 2, 1))
+      const [nodes, income, household, monthSpend, ytdContributed, trendSplits] = await Promise.all([
         prisma.budgetNode.findMany({
           where: { householdId, ownerId },
           orderBy: { position: 'asc' },
@@ -253,7 +255,7 @@ builder.queryFields((t) => ({
           _sum: { amount: true },
           where: {
             budget: { householdId, ownerId },
-            transaction: { date: monthRange({ year, month }) },
+            transaction: { date: range },
           },
         }),
         // Cumulative through the selected month — that's the year-to-date figure.
@@ -262,11 +264,31 @@ builder.queryFields((t) => ({
           _sum: { contributed: true },
           where: { node: { householdId, ownerId }, year, month: { lte: month } },
         }),
+        prisma.transactionSplit.findMany({
+          where: {
+            budget: { householdId, ownerId },
+            transaction: { date: { gte: lastMonthStart, lt: range.lt } },
+          },
+          select: { budgetId: true, amount: true, transaction: { select: { date: true } } },
+        }),
       ])
 
       const spentBy = new Map(monthSpend.map((row) => [row.budgetId, row._sum.amount]))
       const contributedYtdBy = new Map(ytdContributed.map((row) => [row.nodeId, row._sum.contributed]))
       const savings = savingsNodeIds(nodes)
+      // Day 0 of the next month = the last day of this one.
+      const days = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate()
+      const dailySpend: number[] = Array(days(year, month)).fill(0)
+      const lastMonthDailySpend: number[] = Array(days(year, month - 1)).fill(0)
+      // Rent is one fixed lump on the 1st; left in, it swamps the day-to-day pace.
+      const rent = rentNodeIds(nodes)
+      for (const split of trendSplits) {
+        if (savings.has(split.budgetId) || rent.has(split.budgetId)) continue
+        const date = split.transaction.date
+        const series = date < range.gte ? lastMonthDailySpend : dailySpend
+        const i = date.getUTCDate() - 1
+        series[i] = roundCents(series[i] + split.amount.toNumber())
+      }
       const carriedByNode = await carriedBalances({ householdId, ownerId, sel: { year, month }, nodes, household })
 
       const thisMonthByNode = new Map(
@@ -320,6 +342,8 @@ builder.queryFields((t) => ({
         budgetStartYear: household?.budgetStartYear ?? null,
         budgetStartMonth: household?.budgetStartMonth ?? null,
         monthSwept,
+        dailySpend,
+        lastMonthDailySpend,
       }
     },
   }),

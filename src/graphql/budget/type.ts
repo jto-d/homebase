@@ -103,6 +103,11 @@ export const BudgetMonthPayload = builder.simpleObject('BudgetMonthPayload', {
     /// Already swept out of this month's leftover, across every fund — what the
     /// Goals card's footer nets out so the same dollar can't be swept twice.
     monthSwept: t.float(),
+    /// Spend outside savings and rent per day of the month, index 0 = the 1st. Splits only,
+    /// so the Trends card compares the same money the ledger's Spent column shows.
+    dailySpend: t.floatList(),
+    /// The same for the month before — the Trends card's comparison line.
+    lastMonthDailySpend: t.floatList(),
   }),
 })
 

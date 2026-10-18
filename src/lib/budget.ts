@@ -256,13 +256,30 @@ export interface BudgetLeaf {
 export function savingsNodeIds(
   nodes: readonly { id: string; parentId: string | null; isSavings: boolean }[]
 ): Set<string> {
+  return inheritedIds(nodes, (n) => n.isSavings)
+}
+
+// ponytail: rent is found by label, not a flag. Add an isRent flag on BudgetNode
+// if people name it something else ("Mortgage", "Housing").
+export const RENT = /\b(rent)\b/i
+
+/** Node ids inside a rent subtree — a node labelled rent and everything under it. */
+export function rentNodeIds(nodes: readonly { id: string; parentId: string | null; label: string }[]): Set<string> {
+  return inheritedIds(nodes, (n) => RENT.test(n.label))
+}
+
+/** Ids of nodes that match `test` themselves or through an ancestor. */
+function inheritedIds<T extends { id: string; parentId: string | null }>(
+  nodes: readonly T[],
+  test: (node: T) => boolean
+): Set<string> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const result = new Set<string>()
   for (const start of nodes) {
     // Two levels of ancestry at most, but bounded either way so a cycle from a
     // bad write can't spin here.
     for (let node = byId.get(start.id), hops = 0; node && hops < 8; hops++) {
-      if (node.isSavings) {
+      if (test(node)) {
         result.add(start.id)
         break
       }

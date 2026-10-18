@@ -12,6 +12,7 @@ import { BudgetMonthDocument } from '../../(app)/budget/budget.queries'
 import { HouseholdDocument } from '../../(app)/household.queries'
 import { PageHeader } from '../page-header'
 import { PlanChart } from './plan-chart'
+import { TrendChart } from './trend-chart'
 
 const Page = styled.div({
   display: 'flex',
@@ -242,6 +243,11 @@ export default function V2BudgetPage() {
             <Islands>
               <IncomeBanner income={data.budgetMonth.income.reduce((s, i) => s + i.amount, 0)} budgeted={budgeted} />
               <PlanChart roots={roots} />
+              <TrendChart
+                month={month}
+                dailySpend={data.budgetMonth.dailySpend}
+                lastMonthDailySpend={data.budgetMonth.lastMonthDailySpend}
+              />
             </Islands>
           </>
         )}

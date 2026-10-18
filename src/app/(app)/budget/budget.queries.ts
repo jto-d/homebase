@@ -33,6 +33,8 @@ export const BudgetMonthDocument = graphql(`
         position
       }
       monthSwept
+      dailySpend
+      lastMonthDailySpend
     }
   }
 `)

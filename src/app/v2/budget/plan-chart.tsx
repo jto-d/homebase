@@ -5,7 +5,7 @@ import styled from '@emotion/styled'
 import type { Options } from 'highcharts'
 import { brand } from '@/lib/theme'
 import { color, radius, Text } from '@/components/v2'
-import { budgetTotals, type BudgetTreeNode } from '@/lib/budget'
+import { budgetTotals, RENT, type BudgetTreeNode } from '@/lib/budget'
 import { fmtDollars } from '@/lib/format'
 
 export const Island = styled.section({
@@ -15,7 +15,7 @@ export const Island = styled.section({
   padding: 16,
 })
 
-const LegendRow = styled.div({
+export const LegendRow = styled.div({
   display: 'flex',
   alignItems: 'center',
   gap: 8,
@@ -25,11 +25,7 @@ const LegendRow = styled.div({
   fontVariantNumeric: 'tabular-nums',
 })
 
-const Swatch = styled.span({ width: 10, height: 10, borderRadius: 3, flex: 'none' })
-
-// ponytail: rent is found by label, not a flag. Add an isRent flag on BudgetNode
-// if people name it something else ("Mortgage", "Housing").
-const RENT = /\b(rent)\b/i
+export const Swatch = styled.span({ width: 10, height: 10, borderRadius: 3, flex: 'none' })
 
 /** Topmost nodes labelled rent, outside savings — a "Rent" group's "Rent" child isn't counted twice. */
 function rentSum(nodes: readonly BudgetTreeNode[], of: (n: BudgetTreeNode) => number): number {
