@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import type { Options } from 'highcharts'
 import { brand } from '@/lib/theme'
-import { color, currentMonth, Text, type MonthSel } from '@/components/v2'
-import { roundCents } from '@/lib/budget'
+import { color, Island, Text } from '@/components/v2'
+import { currentMonth } from '@/components/MonthStepper'
+import { roundCents, type MonthSel } from '@/lib/budget'
 import { fmtDollars } from '@/lib/format'
-import { Island, LegendRow, Swatch } from './plan-chart'
+import { chartBase, Legend, useHighchart } from './chart'
+
+const THIS_MONTH = brand.teal[600]
+const LAST_MONTH = brand.zinc[300]
+const AXIS_LABELS = { color: color.textMuted, fontSize: '11px' }
 
 /** Running total as [day, total] points, so the lines show pace: where each month stood by day N. */
 function cumulative(daily: readonly number[]): [number, number][] {
@@ -23,34 +26,22 @@ export function TrendChart({
   dailySpend: readonly number[]
   lastMonthDailySpend: readonly number[]
 }) {
-  const el = useRef<HTMLDivElement>(null)
   const now = currentMonth()
   // The current month stops at today instead of running flat to the 31st.
   const today = now.year === month.year && now.month === month.month ? new Date().getDate() : dailySpend.length
   const thisMonth = cumulative(dailySpend).slice(0, today)
   const lastMonth = cumulative(lastMonthDailySpend)
-  const key = JSON.stringify([thisMonth, lastMonth])
 
-  useEffect(() => {
-    if (!el.current) return
-    const options: Options = {
-      chart: {
-        type: 'line',
-        height: 200,
-        backgroundColor: 'transparent',
-        style: { fontFamily: 'inherit' },
-        spacing: [8, 4, 0, 4],
-      },
+  const el = useHighchart(
+    {
+      ...chartBase,
+      chart: { ...chartBase.chart, type: 'line', height: 200, spacing: [8, 4, 0, 4] },
       title: { text: undefined },
-      credits: { enabled: false },
-      legend: { enabled: false },
       xAxis: {
         min: 1,
         max: Math.max(lastMonth.length, dailySpend.length),
         tickPositions: [1, 15, dailySpend.length],
-        labels: {
-          style: { color: color.textMuted, fontSize: '11px' },
-        },
+        labels: { style: AXIS_LABELS },
         lineColor: color.border,
         tickLength: 0,
       },
@@ -63,7 +54,7 @@ export function TrendChart({
           formatter() {
             return fmtDollars(Number(this.value))
           },
-          style: { color: color.textMuted, fontSize: '11px' },
+          style: AXIS_LABELS,
         },
       },
       tooltip: {
@@ -77,21 +68,12 @@ export function TrendChart({
         line: { marker: { enabled: false }, lineWidth: 2, states: { hover: { lineWidth: 2 } } },
       },
       series: [
-        { type: 'line', name: 'Last month', data: lastMonth, color: brand.zinc[300], dashStyle: 'ShortDash' },
-        { type: 'line', name: 'This month', data: thisMonth, color: brand.teal[600] },
+        { type: 'line', name: 'Last month', data: lastMonth, color: LAST_MONTH, dashStyle: 'ShortDash' },
+        { type: 'line', name: 'This month', data: thisMonth, color: THIS_MONTH },
       ],
-    }
-    // Loaded in the effect so Highcharts never runs during SSR.
-    let chart: { destroy(): void } | undefined
-    let cancelled = false
-    import('highcharts').then(({ default: Highcharts }) => {
-      if (!cancelled && el.current) chart = Highcharts.chart(el.current, options)
-    })
-    return () => {
-      cancelled = true
-      chart?.destroy()
-    }
-  }, [key])
+    },
+    JSON.stringify([thisMonth, lastMonth])
+  )
 
   // Same day last month, so the comparison is like for like mid-month.
   const lastAtToday = lastMonth[Math.min(today, lastMonth.length) - 1]?.[1] ?? 0
@@ -101,16 +83,12 @@ export function TrendChart({
     <Island>
       <Text variant="strong">Trends</Text>
       <div ref={el} />
-      {[
-        { name: 'This month', value: thisAtToday, swatch: brand.teal[600] },
-        { name: 'Last month', value: lastAtToday, swatch: brand.zinc[300] },
-      ].map((row) => (
-        <LegendRow key={row.name}>
-          <Swatch style={{ backgroundColor: row.swatch }} />
-          <span style={{ flex: 1 }}>{row.name}</span>
-          <span>{fmtDollars(row.value)}</span>
-        </LegendRow>
-      ))}
+      <Legend
+        items={[
+          { name: 'This month', color: THIS_MONTH, value: thisAtToday },
+          { name: 'Last month', color: LAST_MONTH, value: lastAtToday },
+        ]}
+      />
     </Island>
   )
 }

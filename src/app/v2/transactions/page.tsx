@@ -2,104 +2,29 @@
 
 import { useState } from 'react'
 import styled from '@emotion/styled'
-import { CaretRightIcon, FunnelSimpleIcon, PlusIcon, BankIcon } from '@phosphor-icons/react'
-import {
-  Button,
-  Collapsible,
-  Count,
-  currentMonth,
-  MonthStepper,
-  Stack,
-  Text,
-  type MonthSel,
-} from '@/components/v2'
-import { PageHeader } from '../page-header'
+import { EmptyNote, Section } from '@/components/v2'
+import { currentMonth } from '@/components/MonthStepper'
+import type { MonthSel } from '@/lib/budget'
+import { PageHeader } from '../_components/page-header'
+import { Toolbar } from './_components/toolbar'
 
-const counts = { unfiled: 0, filed: 0 }
-
-const Page = styled.div({
-  display: 'flex',
-  flexDirection: 'column',
-  flex: 1,
-  minHeight: 0,
-})
-
-const Toolbar = styled.div({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 8,
-  height: 36,
-  padding: '0 12px 0 16px',
-  flex: 'none',
-})
-
-const List = styled.div({
-  flex: 1,
-  minHeight: 0,
-  overflow: 'auto',
-})
-
-const Empty = styled.div({
-  padding: '8px 8px 12px 28px',
-})
-
-function Section({
-  title,
-  count,
-  defaultOpen = true,
-}: {
-  title: string
-  count: number
-  defaultOpen?: boolean
-}) {
-  return (
-    <Collapsible.Root defaultOpen={defaultOpen}>
-      <Collapsible.Trigger>
-        <Collapsible.Caret>
-          <CaretRightIcon size={12} weight="bold" />
-        </Collapsible.Caret>
-        {title}
-        <Count>{count}</Count>
-      </Collapsible.Trigger>
-      <Collapsible.Panel>
-        <Empty>
-          <Text variant="muted">
-            {count === 0 ? `No ${title.toLowerCase()} transactions` : 'Rows go here'}
-          </Text>
-        </Empty>
-      </Collapsible.Panel>
-    </Collapsible.Root>
-  )
-}
+const List = styled.div({ flex: 1, minHeight: 0, overflow: 'auto' })
 
 export default function V2TransactionsPage() {
   const [month, setMonth] = useState<MonthSel>(currentMonth)
 
   return (
-    <Page>
+    <>
       <PageHeader title="Transactions" />
-      <Toolbar>
-        <MonthStepper value={month} onChange={setMonth} />
-        <Stack direction="row" align="center" gap={2}>
-          <Button variant="subtle">
-            <FunnelSimpleIcon size={14} weight="bold" />
-            Filter
-          </Button>
-          <Button variant="subtle">
-            <BankIcon size={14} weight="bold" />
-            Link a bank
-          </Button>
-          <Button variant="subtle">
-            <PlusIcon size={14} weight="bold" />
-            Add
-          </Button>
-        </Stack>
-      </Toolbar>
+      <Toolbar month={month} onMonthChange={setMonth} />
       <List>
-        <Section title="Unfiled" count={counts.unfiled} />
-        <Section title="Filed" count={counts.filed} />
+        <Section title="Unfiled" count={0}>
+          <EmptyNote>No unfiled transactions</EmptyNote>
+        </Section>
+        <Section title="Filed" count={0}>
+          <EmptyNote>No filed transactions</EmptyNote>
+        </Section>
       </List>
-    </Page>
+    </>
   )
 }

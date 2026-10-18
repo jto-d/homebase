@@ -22,7 +22,7 @@ import {
 import { buttonReset, color, focusRing, IconButton, Menu, radius, Stack } from '@/components/v2'
 import { useSidebar } from './sidebar-context'
 
-export const V2_SIDEBAR_WIDTH = 232
+const WIDTH = 232
 
 const NAV_ITEMS: { href: string; label: string; icon: Icon }[] = [
   { href: '/v2/home', label: 'Home', icon: HouseIcon },
@@ -40,7 +40,7 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 const Rail = styled.div({
-  width: V2_SIDEBAR_WIDTH,
+  width: WIDTH,
   flex: 'none',
   overflow: 'hidden',
   transition: 'width 150ms ease, visibility 150ms',
@@ -48,7 +48,7 @@ const Rail = styled.div({
 })
 
 const Nav = styled.nav({
-  width: V2_SIDEBAR_WIDTH,
+  width: WIDTH,
   height: '100vh',
   display: 'flex',
   flexDirection: 'column',

@@ -13,9 +13,11 @@ export const color = {
   selected: brand.zinc[200],
   accent: brand.teal[600],
   focus: brand.teal[500],
+  warn: brand.amber[700],
+  danger: brand.red[600],
 } as const
 
-export const radius = { sm: 4, md: 6 } as const
+export const radius = { sm: 4, md: 6, lg: 12 } as const
 
 export const shadow = brand.shadow
 
