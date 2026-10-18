@@ -5,6 +5,12 @@ body {
   font-family: var(--font-inter), Inter, system-ui, sans-serif;
 }
 
+/* Scrollbars are hidden everywhere; scrolling still works (wheel, trackpad, keyboard). */
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
 }
