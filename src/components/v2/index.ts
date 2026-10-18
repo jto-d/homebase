@@ -1,4 +1,5 @@
 export { Button } from './Button'
+export { CatIcon } from './CatIcon'
 export { EmptyNote, Section } from './Collapsible'
 export { Count } from './Count'
 export { IconButton } from './IconButton'

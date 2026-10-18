@@ -1,7 +1,7 @@
 'use client'
 
 import styled from '@emotion/styled'
-import { color, EmptyNote, Section } from '@/components/v2'
+import { CatIcon, color, EmptyNote, Section } from '@/components/v2'
 import type { BudgetTreeNode } from '@/lib/budget'
 import { fmtDollars, fmtSigned } from '@/lib/format'
 
@@ -49,6 +49,7 @@ function Row({ node, indent }: { node: BudgetTreeNode; indent: number }) {
   const left = node.budget - netSpent
   return (
     <Line indent={indent}>
+      <CatIcon icon={node.icon} />
       <Label>{node.label}</Label>
       <Num>{fmtDollars(node.budget)}</Num>
       <Num tone="muted">{node.rollsOver ? fmtSigned(netSpent) : fmtDollars(node.spent)}</Num>
