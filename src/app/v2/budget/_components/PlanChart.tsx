@@ -4,7 +4,7 @@ import { brand } from '@/lib/theme'
 import { color, Island, Text } from '@/components/v2'
 import { budgetTotals, RENT, type BudgetTreeNode } from '@/lib/budget'
 import { fmtDollars } from '@/lib/format'
-import { chartBase, Legend, useHighchart } from './chart'
+import { chartBase, Legend, useHighchart } from './Chart'
 
 /** Topmost nodes labelled rent, outside savings — a "Rent" group's "Rent" child isn't counted twice. */
 function rentSum(nodes: readonly BudgetTreeNode[], of: (n: BudgetTreeNode) => number): number {

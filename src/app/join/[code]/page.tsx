@@ -1,4 +1,4 @@
-import { JoinCard } from './join-card'
+import { JoinCard } from './JoinCard'
 
 /**
  * Public invite landing page — outside the (app) route group so it renders for a

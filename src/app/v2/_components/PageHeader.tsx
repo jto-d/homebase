@@ -3,7 +3,7 @@
 import styled from '@emotion/styled'
 import { SidebarSimpleIcon } from '@phosphor-icons/react'
 import { color, IconButton, Stack, Text } from '@/components/v2'
-import { useSidebar } from './sidebar-context'
+import { useSidebar } from './SidebarContext'
 
 const Bar = styled.header({
   display: 'flex',

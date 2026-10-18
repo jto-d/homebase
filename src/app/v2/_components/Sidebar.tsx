@@ -20,7 +20,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react'
 import { buttonReset, color, focusRing, IconButton, Menu, radius, Stack } from '@/components/v2'
-import { useSidebar } from './sidebar-context'
+import { useSidebar } from './SidebarContext'
 
 const WIDTH = 232
 

@@ -10,10 +10,10 @@ import type { BudgetTotals, BudgetTreeNode } from '@/lib/budget'
 import { fmtDollars, fmtSigned } from '@/lib/format'
 import { tabularNums } from '@/lib/sx'
 import { brand } from '@/lib/theme'
-import { COL_W, ColHeader } from './col-header'
-import { GroupHeader } from './group-header'
-import { LedgerRow } from './ledger-row'
-import type { PendingDelete } from './delete-node-dialog'
+import { COL_W, ColHeader } from './ColHeader'
+import { GroupHeader } from './GroupHeader'
+import { LedgerRow } from './LedgerRow'
+import type { PendingDelete } from './DeleteNodeDialog'
 
 export interface LedgerHandlers {
   onAddChild: (parentId: string) => void

@@ -83,6 +83,13 @@ step. `pnpm build` (full `tsc` type-check) is the verification signal for code c
 behavior by running the app. There is also no linter — `--no-eslint` was passed to
 `create-next-app` and Next 16 removed `next lint` entirely. `postinstall` runs `prisma generate`.
 
+## File naming
+
+React component files are PascalCase, named after the component they export:
+`IncomeBanner.tsx`, not `income-banner.tsx`. Non-component modules (`src/lib/*`, `*.queries.ts`,
+`auth.ts`), Next.js special files (`page.tsx`, `layout.tsx`, `route.ts`) and `src/graphql/` keep
+their current names.
+
 ## Schema-and-codegen pipeline
 
 One-way, and must run in this order whenever Prisma models or Pothos types change:

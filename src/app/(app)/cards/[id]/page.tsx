@@ -16,10 +16,10 @@ import { memberLabel } from '@/lib/members'
 import { tabularNums } from '@/lib/sx'
 import { resolveCardDesign, topRewards, fmtRate, baseReward, dbCardToRewardCard } from '@/lib/cardRewards'
 import { cardAnnualFee, cardCapturedYTD, cardPerksUsed, cardVerdict } from '@/lib/card'
-import { useHousehold } from '../../household-context'
+import { useHousehold } from '../../HouseholdContext'
 import { CreditCardsDocument, LogPerkCreditDocument } from '../cards.queries'
-import { PerkTracker } from '../perk-tracker'
-import { LogCreditDialog } from '../log-credit-dialog'
+import { PerkTracker } from '../PerkTracker'
+import { LogCreditDialog } from '../LogCreditDialog'
 import type { CreditCardsQuery } from '@/gql/graphql'
 
 type Perk = CreditCardsQuery['creditCards'][number]['perks'][number]

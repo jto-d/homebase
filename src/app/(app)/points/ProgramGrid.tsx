@@ -8,7 +8,7 @@ import CloseIcon from '@mui/icons-material/CloseOutlined'
 import { MemberAvatar, type Member } from '@/components/MemberAvatar'
 import { EditableNumber, Eyebrow, SurfaceCard } from '@/components/ui'
 import { memberLabel } from '@/lib/members'
-import { KIND_LABEL } from './add-program-dialog'
+import { KIND_LABEL } from './AddProgramDialog'
 import type { PointsProgramsQuery } from '@/gql/graphql'
 
 type Program = PointsProgramsQuery['pointsPrograms'][number]

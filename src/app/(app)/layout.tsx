@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { AppShell } from './app-shell'
+import { AppShell } from './AppShell'
 
 /**
  * The route gate. No middleware.ts — everything needing a session lives inside

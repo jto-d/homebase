@@ -10,12 +10,12 @@ import { buildBudgetTree, type BudgetTreeNode, type MonthSel } from '@/lib/budge
 import { monthLabel } from '@/lib/format'
 import { BudgetMonthDocument } from '../../(app)/budget/budget.queries'
 import { HouseholdDocument } from '../../(app)/household.queries'
-import { PageHeader } from '../_components/page-header'
-import { BudgetTable } from './_components/budget-table'
-import { IncomeBanner } from './_components/income-banner'
-import { MemberTabs } from './_components/member-tabs'
-import { PlanChart } from './_components/plan-chart'
-import { TrendChart } from './_components/trend-chart'
+import { PageHeader } from '../_components/PageHeader'
+import { BudgetTable } from './_components/BudgetTable'
+import { IncomeBanner } from './_components/IncomeBanner'
+import { MemberTabs } from './_components/MemberTabs'
+import { PlanChart } from './_components/PlanChart'
+import { TrendChart } from './_components/TrendChart'
 
 const Layout = styled.div({
   flex: 1,

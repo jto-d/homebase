@@ -6,7 +6,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { theme } from '@/lib/theme'
 import { Providers } from '@/lib/urql'
-import { AuthSessionProvider } from './session-provider'
+import { AuthSessionProvider } from './SessionProvider'
 
 const inter = Inter({
   subsets: ['latin'],

@@ -18,9 +18,9 @@ import { fmtDay, fmtMoney } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
 import { tabularNums } from '@/lib/sx'
 import { brand } from '@/lib/theme'
-import { useHousehold } from '../household-context'
+import { useHousehold } from '../HouseholdContext'
 import { CreateSettlementDocument, DeleteSettlementDocument, SplitPageDocument } from './split.queries'
-import { SettleUpDialog } from './settle-up-dialog'
+import { SettleUpDialog } from './SettleUpDialog'
 
 type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }
 

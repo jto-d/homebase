@@ -5,8 +5,8 @@ import styled from '@emotion/styled'
 import { EmptyNote, Section } from '@/components/v2'
 import { currentMonth } from '@/components/MonthStepper'
 import type { MonthSel } from '@/lib/budget'
-import { PageHeader } from '../_components/page-header'
-import { Toolbar } from './_components/toolbar'
+import { PageHeader } from '../_components/PageHeader'
+import { Toolbar } from './_components/Toolbar'
 
 const List = styled.div({ flex: 1, minHeight: 0, overflow: 'auto' })
 

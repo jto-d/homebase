@@ -8,8 +8,8 @@ import Link from 'next/link'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { MemberAvatar } from '@/components/MemberAvatar'
-import { HouseholdProvider } from './household-context'
-import { Sidebar } from './sidebar'
+import { HouseholdProvider } from './HouseholdContext'
+import { Sidebar } from './Sidebar'
 import { HouseholdDocument } from './household.queries'
 
 /**

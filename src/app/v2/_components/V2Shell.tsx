@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import styled from '@emotion/styled'
 import { color } from '@/components/v2'
-import { SidebarContext } from './sidebar-context'
-import { V2Sidebar } from './sidebar'
+import { SidebarContext } from './SidebarContext'
+import { V2Sidebar } from './Sidebar'
 
 const Root = styled.div({
   display: 'flex',

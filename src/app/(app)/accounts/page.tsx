@@ -17,7 +17,7 @@ import { CatGlyph, EditableLabel, Eyebrow, ListRow, Row, Segmented, Stack, Stat,
 import { fmtDollars, fmtMoney } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
 import { tabularNums, truncate } from '@/lib/sx'
-import { useHousehold } from '../household-context'
+import { useHousehold } from '../HouseholdContext'
 import {
   AccountsDocument,
   CreateInvestmentLinkTokenDocument,

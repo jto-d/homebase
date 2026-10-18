@@ -11,7 +11,7 @@ import { CatGlyph, EditableLabel, EditableMoney, ListRow, ProgressBar, Row } fro
 import { fmtDollars, fmtSigned } from '@/lib/format'
 import { tabularNums } from '@/lib/sx'
 import { brand } from '@/lib/theme'
-import { COL_W } from './col-header'
+import { COL_W } from './ColHeader'
 
 interface LedgerRowProps {
   label: string

@@ -17,7 +17,7 @@ import { MonthStepper, currentMonth } from '@/components/MonthStepper'
 import { Eyebrow, ProgressBar, Segmented, Stack, SurfaceCard } from '@/components/ui'
 import { memberLabel } from '@/lib/members'
 import { brand } from '@/lib/theme'
-import { useHousehold } from '../household-context'
+import { useHousehold } from '../HouseholdContext'
 import {
   CreatePlaidLinkTokenDocument,
   CreateTransactionDocument,
@@ -30,10 +30,10 @@ import {
   TransactionsMonthDocument,
   UpdateTransactionDocument,
 } from './transactions.queries'
-import { AddTransactionDialog } from './add-transaction-dialog'
+import { AddTransactionDialog } from './AddTransactionDialog'
 import { LinkBankDialog } from '@/components/LinkBankDialog'
-import { TransactionRow, type CategoryGroup } from './transaction-row'
-import { SplitShareDialog } from './split-share-dialog'
+import { TransactionRow, type CategoryGroup } from './TransactionRow'
+import { SplitShareDialog } from './SplitShareDialog'
 import type { TransactionsMonthQuery } from '@/gql/graphql'
 
 type Txn = TransactionsMonthQuery['transactions'][number]

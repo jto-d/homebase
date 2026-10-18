@@ -7,7 +7,7 @@ import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import { Row, Stack, Stat, SurfaceCard } from '@/components/ui'
-import { useHousehold } from '../household-context'
+import { useHousehold } from '../HouseholdContext'
 import {
   AddPointsProgramDocument,
   DeletePointsRedemptionDocument,
@@ -16,10 +16,10 @@ import {
   RemovePointsProgramDocument,
   UpdatePointsProgramBalanceDocument,
 } from './points.queries'
-import { AddProgramDialog } from './add-program-dialog'
-import { ProgramGrid } from './program-grid'
-import { RedemptionPanel } from './redemption-panel'
-import { RemoveProgramDialog, type PendingRemove } from './remove-program-dialog'
+import { AddProgramDialog } from './AddProgramDialog'
+import { ProgramGrid } from './ProgramGrid'
+import { RedemptionPanel } from './RedemptionPanel'
+import { RemoveProgramDialog, type PendingRemove } from './RemoveProgramDialog'
 import type { PointsProgramKind } from '@/gql/graphql'
 
 type MutationResult = { error?: { graphQLErrors: readonly { message: string }[]; message: string } }

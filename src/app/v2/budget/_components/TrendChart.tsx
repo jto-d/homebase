@@ -5,7 +5,7 @@ import { color, Island, Text } from '@/components/v2'
 import { currentMonth } from '@/components/MonthStepper'
 import { roundCents, type MonthSel } from '@/lib/budget'
 import { fmtDollars } from '@/lib/format'
-import { chartBase, Legend, useHighchart } from './chart'
+import { chartBase, Legend, useHighchart } from './Chart'
 
 const THIS_MONTH = brand.teal[600]
 const LAST_MONTH = brand.zinc[300]

@@ -18,13 +18,13 @@ import { budgetTotals, buildBudgetTree, monthOrdinal, type BudgetNodeData } from
 import { NEW_CATEGORY, NEW_GROUP, NEW_INCOME, NEW_LINE_ITEM } from '@/lib/budgetDefaults'
 import { monthLabel } from '@/lib/format'
 import { memberLabel } from '@/lib/members'
-import { useHousehold } from '../household-context'
-import { BudgetedPanel } from './budgeted-panel'
-import { BudgetLedger, type LedgerHandlers } from './budget-ledger'
-import { DeleteNodeDialog, type PendingDelete } from './delete-node-dialog'
-import { GoalsPanel } from './goals-panel'
-import { IncomePanel } from './income-panel'
-import { SummaryStrip } from './summary-strip'
+import { useHousehold } from '../HouseholdContext'
+import { BudgetedPanel } from './BudgetedPanel'
+import { BudgetLedger, type LedgerHandlers } from './BudgetLedger'
+import { DeleteNodeDialog, type PendingDelete } from './DeleteNodeDialog'
+import { GoalsPanel } from './GoalsPanel'
+import { IncomePanel } from './IncomePanel'
+import { SummaryStrip } from './SummaryStrip'
 import {
   AddBudgetNodeDocument,
   AddIncomeSourceDocument,

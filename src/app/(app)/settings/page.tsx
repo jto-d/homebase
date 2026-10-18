@@ -12,7 +12,7 @@ import Typography from '@mui/material/Typography'
 import { MemberAvatar } from '@/components/MemberAvatar'
 import { currentMonth, MonthStepper, type MonthSel } from '@/components/MonthStepper'
 import { memberLabel } from '@/lib/members'
-import { useHousehold } from '../household-context'
+import { useHousehold } from '../HouseholdContext'
 import { CreateHouseholdInviteDocument, SetBudgetStartDocument } from '../household.queries'
 
 export default function SettingsPage() {
